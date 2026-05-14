@@ -373,13 +373,14 @@ const labelStyle: React.CSSProperties = {
 
 /* ── Task row card ── */
 function TaskCard({
-  task, memberMap, productMap, onEdit, onStatusChange,
+  task, memberMap, productMap, onEdit, onStatusChange, readOnly,
 }: {
   task: Task;
   memberMap: Map<string, Member>;
   productMap: Map<string, string>;
   onEdit: () => void;
   onStatusChange: (s: TaskStatus) => void;
+  readOnly?: boolean;
 }) {
   const overdue = isOverdue(task.due_date, task.status);
 
@@ -466,12 +467,14 @@ function TaskCard({
       </div>
 
       {/* Edit */}
-      <button onClick={onEdit} style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        color: 'var(--text3)', display: 'flex', padding: 4, borderRadius: 5, flexShrink: 0,
-      }}>
-        <Edit2 size={14} />
-      </button>
+      {!readOnly && (
+        <button onClick={onEdit} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text3)', display: 'flex', padding: 4, borderRadius: 5, flexShrink: 0,
+        }}>
+          <Edit2 size={14} />
+        </button>
+      )}
     </div>
   );
 }
@@ -496,6 +499,7 @@ function Pill({ label, active, onClick }: { label: string; active: boolean; onCl
 /* ── Main ── */
 export default function Tasks() {
   const { member } = useAuth();
+  const isAdmin = member?.role === 'admin';
 
   const [tasks, setTasks]         = useState<Task[]>([]);
   const [members, setMembers]     = useState<Member[]>([]);
@@ -513,7 +517,7 @@ export default function Tasks() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from('members').select('*').eq('active', true).in('role', ['manager', 'member']).order('name'),
+      supabase.from('members').select('*').eq('active', true).in('role', ['owner', 'admin', 'member']).order('name'),
       supabase.from('products').select('*'),
     ]).then(([{ data: mems }, { data: prods }]) => {
       setMembers(mems ?? []);
@@ -694,6 +698,7 @@ export default function Tasks() {
               productMap={productMap}
               onEdit={() => setModal({ open: true, task })}
               onStatusChange={s => handleStatusChange(task.id, s)}
+              readOnly={isAdmin}
             />
           ))}
         </div>

@@ -339,11 +339,12 @@ function LeaveModal({ members, managerId, onSave, onClose }: LeaveFormProps) {
 
 /* ── Leave row card ── */
 function LeaveCard({
-  row, member, onDelete,
+  row, member, onDelete, readOnly,
 }: {
   row: LeaveLogType;
   member: Member | undefined;
   onDelete: () => void;
+  readOnly?: boolean;
 }) {
   const today   = isOnLeaveToday(row);
   const days    = countDays(row.start_date, row.end_date, row.is_half_day);
@@ -397,19 +398,64 @@ function LeaveCard({
         </div>
       </div>
 
-      <button
-        onClick={onDelete}
-        title="Remove leave record"
+      {!readOnly && (
+        <button
+          onClick={onDelete}
+          title="Remove leave record"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)',
+            display: 'flex', padding: 6, borderRadius: 6, flexShrink: 0,
+            transition: 'color 0.1s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text3)')}
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Delete confirmation modal ── */
+function DeleteConfirmModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 300,
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+    }} onClick={onCancel}>
+      <div
+        onClick={e => e.stopPropagation()}
         style={{
-          background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)',
-          display: 'flex', padding: 6, borderRadius: 6, flexShrink: 0,
-          transition: 'color 0.1s',
+          background: 'var(--bg2)', border: '1px solid var(--border)',
+          borderRadius: 14, padding: 28, width: '100%', maxWidth: 360,
+          display: 'flex', flexDirection: 'column', gap: 20,
         }}
-        onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
-        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text3)')}
       >
-        <Trash2 size={14} />
-      </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Remove leave record?</div>
+          <div style={{ fontSize: 13, color: 'var(--text2)' }}>This action cannot be undone.</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '9px 20px', borderRadius: 8, border: '1px solid var(--border2)',
+              background: 'transparent', color: 'var(--text2)', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >Cancel</button>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '9px 20px', borderRadius: 8, border: 'none',
+              background: 'var(--red)', color: '#fff', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >Remove</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -417,6 +463,7 @@ function LeaveCard({
 /* ── Main ── */
 export default function LeaveLog() {
   const { member: me } = useAuth();
+  const isAdmin = me?.role === 'admin';
 
   const [leaves, setLeaves]   = useState<LeaveLogType[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -424,6 +471,7 @@ export default function LeaveLog() {
   const [showModal, setShowModal] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
   const [memberFilter, setMemberFilter] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const memberMap = new Map(members.map(m => [m.id, m]));
 
@@ -432,7 +480,7 @@ export default function LeaveLog() {
       .from('members')
       .select('*')
       .eq('active', true)
-      .in('role', ['manager', 'member'])
+      .in('role', ['owner', 'admin', 'member'])
       .order('name')
       .then(({ data }) => setMembers(data ?? []));
   }, []);
@@ -463,9 +511,9 @@ export default function LeaveLog() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Remove this leave record?')) return;
     await supabase.from('leave_log').delete().eq('id', id);
     setLeaves(prev => prev.filter(l => l.id !== id));
+    setDeleteTarget(null);
   }
 
   const filtered = memberFilter
@@ -486,17 +534,19 @@ export default function LeaveLog() {
             Manager-submitted only · {onLeaveNow.length > 0 ? `${onLeaveNow.length} on leave today` : 'No one on leave today'}
           </div>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '9px 18px', borderRadius: 8, border: 'none',
-            background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600,
-            cursor: 'pointer', fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <Plus size={15} /> Log leave
-        </button>
+        {!isAdmin && (
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '9px 18px', borderRadius: 8, border: 'none',
+              background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Plus size={15} /> Log leave
+          </button>
+        )}
       </div>
 
       {/* ── On leave today summary ── */}
@@ -620,19 +670,28 @@ export default function LeaveLog() {
               key={row.id}
               row={row}
               member={memberMap.get(row.member_id)}
-              onDelete={() => handleDelete(row.id)}
+              onDelete={() => setDeleteTarget(row.id)}
+              readOnly={isAdmin}
             />
           ))}
         </div>
       )}
 
-      {/* ── Modal ── */}
+      {/* ── Log leave modal ── */}
       {showModal && me && (
         <LeaveModal
           members={members}
           managerId={me.id}
           onSave={handleSave}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {/* ── Delete confirm modal ── */}
+      {deleteTarget && (
+        <DeleteConfirmModal
+          onConfirm={() => handleDelete(deleteTarget)}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>

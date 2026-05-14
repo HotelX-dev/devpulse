@@ -18,7 +18,7 @@ import Team from './pages/manager/Team';
 import MyDashboard from './pages/member/MyDashboard';
 import MyTasks from './pages/member/MyTasks';
 import MemberStandup from './pages/member/Standup';
-import Overview from './pages/management/Overview';
+
 
 /* ── Providers ── */
 
@@ -49,8 +49,7 @@ function RootRedirect() {
   const { member, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!member) return <Navigate to="/login" replace />;
-  if (member.role === 'manager')    return <Navigate to="/manager/dashboard" replace />;
-  if (member.role === 'management') return <Navigate to="/management/overview" replace />;
+  if (member.role === 'owner' || member.role === 'admin') return <Navigate to="/manager/dashboard" replace />;
   return <Navigate to="/member/dashboard" replace />;
 }
 
@@ -139,7 +138,7 @@ export default function App() {
 
             {/* Manager routes */}
             <Route path="/manager/*" element={
-              <ProtectedRoute roles={['manager']}>
+              <ProtectedRoute roles={['owner', 'admin']}>
                 <AppShell>
                   <Routes>
                     <Route path="dashboard" element={<ManagerDashboard />} />
@@ -168,17 +167,7 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            {/* Management routes */}
-            <Route path="/management/*" element={
-              <ProtectedRoute roles={['management']}>
-                <AppShell>
-                  <Routes>
-                    <Route path="overview" element={<Overview />} />
-                    <Route path="*"        element={<Navigate to="overview" replace />} />
-                  </Routes>
-                </AppShell>
-              </ProtectedRoute>
-            } />
+            <Route path="/management/*" element={<Navigate to="/manager/dashboard" replace />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -1,7 +1,29 @@
-export type Role = 'manager' | 'member' | 'management';
+export type Role = 'owner' | 'admin' | 'member';
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'QC' | 'NO_ACTION' | 'DEPLOYED' | 'REOPEN' | 'TO_DEPLOY';
 export type TaskStatus = 'Pending' | 'In Progress' | 'Blocked' | 'QC' | 'Done';
-export type AlertType = 'MISSING_STANDUP' | 'STALE_TICKET' | 'ADHOC_OVERLOAD' | 'BACKLOG_GROWING';
+export type AlertType =
+  | 'MISSING_STANDUP'
+  | 'STALE_TICKET'
+  | 'ADHOC_OVERLOAD'
+  | 'BACKLOG_GROWING'
+  | 'STALE_BLOCKER'
+  | 'TICKET_AGED_CRITICAL'
+  | 'DELIVERY_AT_RISK';
+
+export interface Blocker {
+  id: string;
+  standup_log_id: string | null;
+  member_id: string;
+  product_id: string | null;
+  ticket_ref: string | null;
+  description: string;
+  action_required: string | null;
+  assigned_to: string | null;
+  status: 'Open' | 'In Progress' | 'Resolved';
+  raised_at: string;
+  resolved_at: string | null;
+  created_at: string;
+}
 export type LeaveType = 'Annual Leave' | 'MC' | 'Emergency';
 export type TaskType = 'Ticket' | 'Adhoc' | 'Migration' | 'Bug fix' | 'Performance' | 'Other';
 export type Severity = 'HIGH' | 'MEDIUM' | 'LOW';
@@ -109,6 +131,13 @@ export interface ForecastPoint {
   optimistic: number;
   expected: number;
   pessimistic: number;
+}
+
+export interface MemberTicketMap {
+  id: string;
+  raw_name: string;
+  member_id: string | null;
+  created_at: string;
 }
 
 export interface MonthlySnapshot {

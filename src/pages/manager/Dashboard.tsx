@@ -75,7 +75,7 @@ export default function ManagerDashboard() {
       supabase.from('products').select('*'),
       supabase.from('members').select('id, name, email, role, active, avatar_color, created_at')
         .eq('active', true)
-        .in('role', ['manager', 'member'])
+        .in('role', ['owner', 'admin', 'member'])
         .order('name'),
     ]).then(([{ data: prods }, { data: mems }]) => {
       const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT'];

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Upload, CheckSquare, MessageSquare,
-  Calendar, Users, BarChart3, LogOut,
+  Calendar, Users, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import Avatar from '../UI/Avatar';
@@ -27,9 +27,11 @@ const memberNav: NavItem[] = [
   { to: '/member/standup',   icon: <MessageSquare size={18} />,   label: 'Standup' },
 ];
 
-const managementNav: NavItem[] = [
-  { to: '/management/overview', icon: <BarChart3 size={18} />, label: 'Overview' },
-];
+const ROLE_LABEL: Record<string, string> = {
+  owner:  'Owner',
+  admin:  'Admin',
+  member: 'Member',
+};
 
 const navLinkBase: React.CSSProperties = {
   display: 'flex',
@@ -48,8 +50,7 @@ export default function Sidebar() {
   const { member, signOut } = useAuth();
 
   const navItems =
-    member?.role === 'manager'    ? managerNav :
-    member?.role === 'management' ? managementNav :
+    member?.role === 'owner' || member?.role === 'admin' ? managerNav :
     memberNav;
 
   return (
@@ -126,8 +127,8 @@ export default function Sidebar() {
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {member.name}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text2)', textTransform: 'capitalize' }}>
-                {member.role}
+              <div style={{ fontSize: 11, color: 'var(--text2)' }}>
+                {ROLE_LABEL[member.role] ?? member.role}
               </div>
             </div>
           </div>

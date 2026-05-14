@@ -13,8 +13,8 @@ export default function Login() {
   // Redirect if already signed in
   if (member) {
     const dest =
-      member.role === 'manager'    ? '/manager/dashboard' :
-      member.role === 'management' ? '/management/overview' :
+      member.role === 'owner' ? '/manager/dashboard' :
+      member.role === 'admin' ? '/management/overview' :
       '/member/dashboard';
     return <Navigate to={dest} replace />;
   }
