@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, X, Edit2, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { Task, Member, Product, TaskStatus } from '../../types';
 
 /* ── constants ── */
@@ -140,6 +142,7 @@ interface TaskFormProps {
 }
 
 function TaskModal({ task, members, products, currentMemberId, onSave, onClose }: TaskFormProps) {
+  const isMobile = useIsMobile();
   const isEdit = !!task?.id;
   const [form, setForm] = useState<Partial<Task>>({
     title:       '',
@@ -181,14 +184,15 @@ function TaskModal({ task, members, products, currentMemberId, onSave, onClose }
     <div style={{
       position: 'fixed', inset: 0, zIndex: 200,
       background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: isMobile ? 'max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))' : 24,
     }} onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--bg2)', border: '1px solid var(--border)',
-          borderRadius: 14, padding: 28, width: '100%', maxWidth: 560,
-          maxHeight: '90vh', overflowY: 'auto',
+          borderRadius: 14, padding: isMobile ? 18 : 28, width: '100%', maxWidth: 560,
+          maxHeight: isMobile ? 'min(92dvh, 100% - 24px)' : '90vh', overflowY: 'auto',
           display: 'flex', flexDirection: 'column', gap: 18,
         }}
       >
@@ -214,7 +218,7 @@ function TaskModal({ task, members, products, currentMemberId, onSave, onClose }
           </div>
 
           {/* Product + Type */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
             <div>
               <label style={labelStyle}>Product</label>
               <select value={form.product_id ?? ''} onChange={e => patch({ product_id: e.target.value || undefined })}
@@ -233,7 +237,7 @@ function TaskModal({ task, members, products, currentMemberId, onSave, onClose }
           </div>
 
           {/* Status + Priority */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
             <div>
               <label style={labelStyle}>Status</label>
               <select value={form.status ?? 'Pending'} onChange={e => patch({ status: e.target.value as TaskStatus })}
@@ -285,7 +289,7 @@ function TaskModal({ task, members, products, currentMemberId, onSave, onClose }
           </div>
 
           {/* Dates */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
             <div>
               <label style={labelStyle}>Start date</label>
               <input type="date" value={form.task_date ?? ''} onChange={e => patch({ task_date: e.target.value || null })}
@@ -299,7 +303,7 @@ function TaskModal({ task, members, products, currentMemberId, onSave, onClose }
           </div>
 
           {/* Est + Actual days */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
             <div>
               <label style={labelStyle}>Est. days</label>
               <input type="number" min={0} step={0.5}
@@ -382,17 +386,23 @@ function TaskCard({
   onStatusChange: (s: TaskStatus) => void;
   readOnly?: boolean;
 }) {
+  const isMobile = useIsMobile();
   const overdue = isOverdue(task.due_date, task.status);
 
   return (
     <div style={{
       background: 'var(--bg2)', border: `1px solid ${task.status === 'Blocked' ? 'var(--red)33' : 'var(--border)'}`,
       borderRadius: 10, padding: '12px 16px',
-      display: 'flex', alignItems: 'center', gap: 14,
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      alignItems: isMobile ? 'stretch' : 'center',
+      gap: isMobile ? 12 : 14,
     }}>
       {/* Priority */}
       <div style={{
-        width: 28, flexShrink: 0, textAlign: 'center',
+        width: isMobile ? 'auto' : 28,
+        flexShrink: 0,
+        textAlign: isMobile ? 'left' : 'center',
         fontSize: 10, fontWeight: 800,
         color: task.priority === 1 ? 'var(--red)' : 'var(--text3)',
       }}>
@@ -439,42 +449,48 @@ function TaskCard({
         </div>
       </div>
 
-      {/* Assignees */}
-      <div style={{ display: 'flex', gap: -4, flexShrink: 0 }}>
-        {(task.assignees ?? []).slice(0, 4).map((id, i) => {
-          const m = memberMap.get(id);
-          if (!m) return null;
-          return (
-            <div key={id} title={m.name} style={{ marginLeft: i > 0 ? -6 : 0, zIndex: 10 - i }}>
-              <AvatarMini name={m.name} color={m.avatar_color} size={24} />
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: isMobile ? 'space-between' : 'flex-end',
+        gap: 10,
+        flexShrink: 0,
+      }}
+      >
+        <div style={{ display: 'flex', gap: -4, flexShrink: 0, alignItems: 'center' }}>
+          {(task.assignees ?? []).slice(0, 4).map((id, i) => {
+            const m = memberMap.get(id);
+            if (!m) return null;
+            return (
+              <div key={id} title={m.name} style={{ marginLeft: i > 0 ? -6 : 0, zIndex: 10 - i }}>
+                <AvatarMini name={m.name} color={m.avatar_color} size={24} />
+              </div>
+            );
+          })}
+          {(task.assignees ?? []).length > 4 && (
+            <div style={{
+              width: 24, height: 24, borderRadius: '50%', background: 'var(--bg3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9, fontWeight: 700, color: 'var(--text2)', marginLeft: -6,
+            }}>
+              +{task.assignees.length - 4}
             </div>
-          );
-        })}
-        {(task.assignees ?? []).length > 4 && (
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%', background: 'var(--bg3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 9, fontWeight: 700, color: 'var(--text2)', marginLeft: -6,
-          }}>
-            +{task.assignees.length - 4}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Status */}
-      <div style={{ flexShrink: 0 }}>
-        <StatusBadge status={task.status} onChange={onStatusChange} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <StatusBadge status={task.status} onChange={onStatusChange} />
+          {!readOnly && (
+            <button type="button" onClick={onEdit} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text3)', display: 'flex', padding: 8, borderRadius: 5, flexShrink: 0,
+              minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Edit2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
-
-      {/* Edit */}
-      {!readOnly && (
-        <button onClick={onEdit} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--text3)', display: 'flex', padding: 4, borderRadius: 5, flexShrink: 0,
-        }}>
-          <Edit2 size={14} />
-        </button>
-      )}
     </div>
   );
 }
@@ -500,6 +516,8 @@ function Pill({ label, active, onClick }: { label: string; active: boolean; onCl
 export default function Tasks() {
   const { member } = useAuth();
   const isAdmin = member?.role === 'admin';
+  const isMobile = useIsMobile();
+  const pageStyle = usePageShellStyle({ maxWidth: 960, gap: 20 });
 
   const [tasks, setTasks]         = useState<Task[]>([]);
   const [members, setMembers]     = useState<Member[]>([]);
@@ -609,7 +627,7 @@ export default function Tasks() {
   }, {} as Record<TaskStatus, number>);
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 960, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={pageStyle}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -647,7 +665,14 @@ export default function Tasks() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
+        rowGap: 10,
+      }}
+      >
         {/* Product filter */}
         <Pill label="All products" active={!productFilter} onClick={() => setProductFilter('')} />
         {products.map(p => (
@@ -664,10 +689,14 @@ export default function Tasks() {
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search title or ref…"
           style={{
-            marginLeft: 'auto', padding: '6px 12px', borderRadius: 7,
+            marginLeft: isMobile ? 0 : 'auto',
+            flex: isMobile ? '1 1 100%' : '0 0 auto',
+            minWidth: isMobile ? 0 : 180,
+            maxWidth: isMobile ? '100%' : 220,
+            padding: '8px 12px', borderRadius: 7,
             border: '1px solid var(--border2)', background: 'var(--bg2)',
-            color: 'var(--text)', fontSize: 12, outline: 'none',
-            fontFamily: 'var(--font-sans)', width: 180,
+            color: 'var(--text)', fontSize: 16, outline: 'none',
+            fontFamily: 'var(--font-sans)',
           }}
         />
       </div>

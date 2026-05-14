@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Upload, CheckSquare, MessageSquare,
+  LayoutDashboard, Upload, CheckSquare, MessageSquare, PenLine,
   Calendar, Users, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -17,6 +17,7 @@ const managerNav: NavItem[] = [
   { to: '/manager/import',    icon: <Upload size={18} />,          label: 'Import' },
   { to: '/manager/tasks',     icon: <CheckSquare size={18} />,     label: 'Tasks' },
   { to: '/manager/standup',   icon: <MessageSquare size={18} />,   label: 'Standup' },
+  { to: '/manager/my-standup', icon: <PenLine size={18} />,         label: 'My standup' },
   { to: '/manager/leave',     icon: <Calendar size={18} />,        label: 'Leave' },
   { to: '/manager/team',      icon: <Users size={18} />,           label: 'Team' },
 ];

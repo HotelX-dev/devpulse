@@ -33,12 +33,13 @@ export default function Login() {
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    padding: '10px 14px',
+    padding: '12px 14px',
+    minHeight: 48,
     borderRadius: 8,
     border: '1px solid var(--border2)',
     background: 'var(--bg3)',
     color: 'var(--text)',
-    fontSize: 14,
+    fontSize: 16,
     outline: 'none',
     fontFamily: 'var(--font-sans)',
     transition: 'border-color 0.15s',
@@ -46,12 +47,12 @@ export default function Login() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       background: 'var(--bg)',
-      padding: 24,
+      padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
     }}>
       <div style={{
         width: '100%',
@@ -59,7 +60,7 @@ export default function Login() {
         background: 'var(--bg2)',
         border: '1px solid var(--border)',
         borderRadius: 16,
-        padding: '36px 32px',
+        padding: 'clamp(24px, 5vw, 36px) clamp(20px, 5vw, 32px)',
         display: 'flex',
         flexDirection: 'column',
         gap: 24,
@@ -134,13 +135,14 @@ export default function Login() {
             disabled={loading}
             style={{
               marginTop: 4,
-              padding: '11px',
+              padding: '14px 16px',
+              minHeight: 48,
               borderRadius: 8,
               border: 'none',
               background: loading ? 'var(--accent-dim)' : 'var(--accent)',
               color: '#fff',
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: 16,
               cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'background 0.15s',
               fontFamily: 'var(--font-sans)',

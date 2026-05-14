@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, X, Trash2, UserCheck, UserX, Link2, Pencil } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import Avatar from '../../components/UI/Avatar';
 import type { Member, MemberTicketMap, Role } from '../../types';
 
@@ -362,6 +363,7 @@ type Tab = 'members' | 'map';
 export default function Team() {
   const { member: me } = useAuth();
   const isAdmin = me?.role === 'admin';
+  const pageStyle = usePageShellStyle({ maxWidth: 900, gap: 20, paddingDesktop: '24px 28px' });
   const [tab, setTab]             = useState<Tab>('members');
   const [members, setMembers]     = useState<Member[]>([]);
   const [maps, setMaps]           = useState<MemberTicketMap[]>([]);
@@ -414,9 +416,9 @@ export default function Team() {
   const inactiveCount = members.filter(m => !m.active).length;
 
   return (
-    <div style={{ padding: '24px 28px', maxWidth: 900 }}>
+    <div style={pageStyle}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Team</div>
           <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>
@@ -528,10 +530,11 @@ export default function Team() {
         </div>
       ) : (
         /* ── Ticket name map table ── */
-        <div>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{
             background: 'var(--bg2)', border: '1px solid var(--border)',
             borderRadius: 12, overflow: 'hidden',
+            minWidth: 320,
           }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '1fr 1fr 44px',

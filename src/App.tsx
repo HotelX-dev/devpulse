@@ -1,12 +1,16 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import { ThemeContext, useThemeState } from './hooks/useTheme';
 import { AuthContext, useAuthState, useAuth } from './hooks/useAuth';
+import { useAlerts } from './hooks/useAlerts';
+import { useIsMobile } from './hooks/useIsMobile';
 import type { Role } from './types';
 
 import Sidebar from './components/Layout/Sidebar';
 import Topbar from './components/Layout/Topbar';
+import MobileBottomNav from './components/Layout/MobileBottomNav';
+import AlertsFullscreenPanel from './components/Layout/AlertsFullscreenPanel';
 
 import Login from './pages/Login';
 import ManagerDashboard from './pages/manager/Dashboard';
@@ -60,6 +64,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/manager/import':    'Import',
   '/manager/tasks':     'Tasks',
   '/manager/standup':   'Standup',
+  '/manager/my-standup': 'My standup',
   '/manager/leave':     'Leave Log',
   '/manager/team':      'Team',
   '/member/dashboard':  'My Dashboard',
@@ -71,23 +76,49 @@ const PAGE_TITLES: Record<string, string> = {
 function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const title = PAGE_TITLES[location.pathname] ?? 'DevPulse';
+  const isMobile = useIsMobile();
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const { alerts, loading: alertsLoading } = useAlerts();
+  const alertCount = alerts.filter(a => !a.resolved).length;
+
+  const mainPadBottom = isMobile
+    ? 'calc(68px + env(safe-area-inset-bottom, 0px))'
+    : undefined;
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar />
+    <div style={{ display: 'flex', minHeight: '100dvh' }}>
+      {!isMobile && <Sidebar />}
       <div style={{
-        marginLeft: 'var(--sidebar-w)',
+        marginLeft: isMobile ? 0 : 'var(--sidebar-w)',
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100vh',
+        minHeight: '100dvh',
+        minWidth: 0,
         background: 'var(--bg)',
       }}>
-        <Topbar title={title} />
-        <main style={{ flex: 1, overflowY: 'auto' }}>
+        <Topbar
+          title={title}
+          isMobile={isMobile}
+          alertCount={alertCount}
+          onOpenAlerts={() => setAlertsOpen(true)}
+        />
+        <main style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingBottom: mainPadBottom,
+        }}>
           {children}
         </main>
       </div>
+      {isMobile && <MobileBottomNav />}
+      <AlertsFullscreenPanel
+        open={alertsOpen}
+        onClose={() => setAlertsOpen(false)}
+        alerts={alerts}
+        loading={alertsLoading}
+      />
     </div>
   );
 }
@@ -97,7 +128,7 @@ function AppShell({ children }: { children: ReactNode }) {
 function LoadingScreen() {
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -148,6 +179,7 @@ export default function App() {
                     <Route path="import"    element={<Import />} />
                     <Route path="tasks"     element={<Tasks />} />
                     <Route path="standup"   element={<ManagerStandup />} />
+                    <Route path="my-standup" element={<MemberStandup />} />
                     <Route path="leave"     element={<LeaveLog />} />
                     <Route path="team"      element={<Team />} />
                     <Route path="*"         element={<Navigate to="dashboard" replace />} />

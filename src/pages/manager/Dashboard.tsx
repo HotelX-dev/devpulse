@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAlerts } from '../../hooks/useAlerts';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { formatDate } from '../../lib/utils';
 import MetricCard from '../../components/UI/MetricCard';
 import AlertBanner from '../../components/UI/AlertBanner';
@@ -76,6 +78,8 @@ export default function ManagerDashboard() {
   const [loading, setLoading]             = useState(true);
 
   const { alerts } = useAlerts();
+  const isMobile = useIsMobile();
+  const pageStyle = usePageShellStyle({ maxWidth: 1200, gap: 28 });
   const selectedMonth = availableMonths[monthIdx] ?? '';
 
   /* Load products + members once */
@@ -210,14 +214,22 @@ export default function ManagerDashboard() {
 
   if (loading && products.length === 0) {
     return (
-      <div style={{ padding: 32, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text3)', fontSize: 13 }}>
+      <div style={{
+        padding: 'max(16px, env(safe-area-inset-top)) 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        color: 'var(--text3)',
+        fontSize: 13,
+      }}
+      >
         Loading…
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 28 }}>
+    <div style={pageStyle}>
 
       {selectedProduct && importStale && (
         <div style={{
@@ -306,7 +318,13 @@ export default function ManagerDashboard() {
           </Section>
 
           {/* ── Pipeline + Alerts row ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 320px',
+            gap: 16,
+            alignItems: 'start',
+          }}
+          >
             <Section title="Pipeline flow">
               <Card>
                 <PipelineFlow

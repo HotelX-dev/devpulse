@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, X } from 'lucide-react';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { supabase } from '../../lib/supabase';
 import { parseCSV, workbookBytesToCsv, type ParsedTicket } from '../../lib/csvParser';
 import Badge from '../../components/UI/Badge';
@@ -35,7 +36,11 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 function Stepper({ step }: { step: Step }) {
   const steps = ['Setup', 'Upload', 'Preview'];
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 28 }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 0, marginBottom: 28,
+      overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch', paddingBottom: 4,
+    }}
+    >
       {steps.map((label, i) => {
         const n = (i + 1) as Step;
         const active = n === step;
@@ -576,6 +581,7 @@ export default function Import() {
   const [snapshotWarning, setSnapshotWarning] = useState('');
 
   const productName = products.find(p => p.id === productId)?.name ?? '';
+  const pageStyle = usePageShellStyle({ maxWidth: 960, gap: 24, paddingDesktop: '32px' });
 
   /* Load products + member_ticket_map + members on mount */
   useEffect(() => {
@@ -763,7 +769,7 @@ export default function Import() {
   }
 
   return (
-    <div style={{ padding: 32, maxWidth: 960, margin: '0 auto' }}>
+    <div style={pageStyle}>
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Import tickets</h2>
         <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>

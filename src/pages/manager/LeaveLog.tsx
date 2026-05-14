@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, X, Trash2, ChevronLeft, ChevronRight, Plane } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import Avatar from '../../components/UI/Avatar';
 import type { Member, LeaveLog as LeaveLogType, LeaveType } from '../../types';
 
@@ -464,6 +466,8 @@ function DeleteConfirmModal({ onConfirm, onCancel }: { onConfirm: () => void; on
 export default function LeaveLog() {
   const { member: me } = useAuth();
   const isAdmin = me?.role === 'admin';
+  const isMobile = useIsMobile();
+  const pageStyle = usePageShellStyle({ maxWidth: 880, gap: 20 });
 
   const [leaves, setLeaves]   = useState<LeaveLogType[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -524,7 +528,7 @@ export default function LeaveLog() {
   const onLeaveNow = leaves.filter(l => l.start_date <= today && l.end_date >= today);
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={pageStyle}>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -578,8 +582,15 @@ export default function LeaveLog() {
       )}
 
       {/* ── Month navigation + filter ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={() => setMonthOffset(o => o - 1)} style={{
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        flexWrap: 'wrap',
+        rowGap: 12,
+      }}
+      >
+        <button type="button" onClick={() => setMonthOffset(o => o - 1)} style={{
           background: 'none', border: '1px solid var(--border2)', borderRadius: 6,
           padding: '5px 8px', cursor: 'pointer', color: 'var(--text2)', display: 'flex',
         }}>
@@ -588,7 +599,7 @@ export default function LeaveLog() {
         <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', minWidth: 140, textAlign: 'center' }}>
           {monthLabel(monthOffset)}
         </span>
-        <button onClick={() => setMonthOffset(o => o + 1)} style={{
+        <button type="button" onClick={() => setMonthOffset(o => o + 1)} style={{
           background: 'none', border: '1px solid var(--border2)', borderRadius: 6,
           padding: '5px 8px', cursor: 'pointer', color: 'var(--text2)', display: 'flex',
         }}>
@@ -603,15 +614,17 @@ export default function LeaveLog() {
         )}
 
         {/* Member filter */}
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: isMobile ? 0 : 'auto', flex: isMobile ? '1 1 100%' : undefined, minWidth: isMobile ? 0 : undefined }}>
           <select
             value={memberFilter}
             onChange={e => setMemberFilter(e.target.value)}
             style={{
-              padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border2)',
-              background: 'var(--bg2)', color: 'var(--text)', fontSize: 12,
+              padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border2)',
+              background: 'var(--bg2)', color: 'var(--text)', fontSize: 16,
               outline: 'none', fontFamily: 'var(--font-sans)', cursor: 'pointer',
               colorScheme: 'dark',
+              width: isMobile ? '100%' : 'auto',
+              minHeight: 44,
             }}
           >
             <option value="">All members</option>

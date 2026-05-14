@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Plane } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import Avatar from '../../components/UI/Avatar';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
+import { useAuth } from '../../hooks/useAuth';
 import type { Member } from '../../types';
 
 type TType = 'Ticket' | 'Adhoc' | 'Migration' | 'Bug fix' | 'Performance' | 'Other';
@@ -120,7 +123,9 @@ function StatusChip({ label, count, color, icon }: { label: string; count: numbe
 }
 
 export default function ManagerStandup() {
+  const { member: me } = useAuth();
   const today = localToday();
+  const pageStyle = usePageShellStyle({ maxWidth: 880, gap: 24 });
   const [date, setDate]           = useState(today);
   const [members, setMembers]     = useState<Member[]>([]);
   const [standups, setStandups]   = useState<StandupRow[]>([]);
@@ -132,7 +137,7 @@ export default function ManagerStandup() {
   /* Load members + products once */
   useEffect(() => {
     Promise.all([
-      supabase.from('members').select('*').eq('active', true).in('role', ['manager', 'member']).order('name'),
+      supabase.from('members').select('*').eq('active', true).in('role', ['owner', 'admin', 'member']).order('name'),
       supabase.from('products').select('id, name'),
     ]).then(([{ data: mems }, { data: prods }]) => {
       setMembers(mems ?? []);
@@ -195,7 +200,7 @@ export default function ManagerStandup() {
   const isToday = date === today;
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={pageStyle}>
 
       {/* ── Date navigation ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -256,6 +261,35 @@ export default function ManagerStandup() {
           )}
         </div>
       </div>
+
+      {isToday && me && !loading && !leaveSet.has(me.id) && !standupMap.has(me.id) && (
+        <div style={{
+          padding: '12px 14px',
+          borderRadius: 10,
+          border: '1px solid var(--amber)44',
+          background: 'var(--amber-dim)',
+          fontSize: 13,
+          color: 'var(--text)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}>
+          <span>You have not submitted standup for today yet.</span>
+          <Link
+            to="/manager/my-standup"
+            style={{
+              fontWeight: 600,
+              color: 'var(--accent)',
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Fill my standup →
+          </Link>
+        </div>
+      )}
 
       {/* ── Member list ── */}
       {loading ? (

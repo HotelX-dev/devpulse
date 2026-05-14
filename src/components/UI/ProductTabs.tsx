@@ -8,7 +8,18 @@ interface ProductTabsProps {
 
 export default function ProductTabs({ products, selected, onChange }: ProductTabsProps) {
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    <div
+      className="dp-product-tabs"
+      style={{
+        display: 'flex',
+        gap: 6,
+        flexWrap: 'nowrap',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 4,
+        marginBottom: -4,
+      }}
+    >
       {products.map(p => {
         const active = p.id === selected;
         return (

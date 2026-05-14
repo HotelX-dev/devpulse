@@ -5,6 +5,8 @@ interface AlertBannerProps {
   alert: Alert;
   memberName?: string;
   onResolve?: (id: string) => void;
+  /** Larger dismiss control for touch / full-screen panels */
+  touchFriendly?: boolean;
 }
 
 const SEVERITY_STYLES = {
@@ -20,7 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   BACKLOG_GROWING:  'Backlog Growing',
 };
 
-export default function AlertBanner({ alert, memberName, onResolve }: AlertBannerProps) {
+export default function AlertBanner({ alert, memberName, onResolve, touchFriendly }: AlertBannerProps) {
   const s = SEVERITY_STYLES[alert.severity] ?? SEVERITY_STYLES.LOW;
   const { Icon } = s;
 
@@ -48,12 +50,19 @@ export default function AlertBanner({ alert, memberName, onResolve }: AlertBanne
           onClick={() => onResolve(alert.id)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text3)', flexShrink: 0, padding: 2,
-            borderRadius: 4, lineHeight: 1, display: 'flex',
+            color: 'var(--text3)', flexShrink: 0,
+            padding: touchFriendly ? '10px 12px' : 2,
+            minWidth: touchFriendly ? 44 : undefined,
+            minHeight: touchFriendly ? 44 : undefined,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: touchFriendly ? 10 : 4,
+            lineHeight: 1,
+            display: 'flex',
           }}
           title="Dismiss"
         >
-          <X size={13} />
+          <X size={touchFriendly ? 18 : 13} />
         </button>
       )}
     </div>

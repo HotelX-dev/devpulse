@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Edit2, Plus, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { Product } from '../../types';
 
 /* ── constants ── */
@@ -262,6 +263,7 @@ interface LogEntry {
 export default function MemberStandup() {
   const { member } = useAuth();
   const today = localToday();
+  const pageStyle = usePageShellStyle({ maxWidth: 760, gap: 24 });
 
   const [products, setProducts] = useState<Product[]>([]);
   const [existing, setExisting] = useState<LogEntry | null>(null);
@@ -363,7 +365,7 @@ export default function MemberStandup() {
   if (loading) return <div style={{ padding: 32, color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={pageStyle}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

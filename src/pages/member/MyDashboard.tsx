@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, AlertTriangle, Clock, Ticket, ListTodo, Flame, Plane } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { TicketStatus, TaskStatus } from '../../types';
 
 /* ── helpers ── */
@@ -191,6 +192,7 @@ export default function MyDashboard() {
   const { member } = useAuth();
   const navigate   = useNavigate();
   const today      = localToday();
+  const pageStyle  = usePageShellStyle({ maxWidth: 880, gap: 24 });
 
   const [loading, setLoading] = useState(true);
 
@@ -300,7 +302,7 @@ export default function MyDashboard() {
   if (loading) return <div style={{ padding: 32, color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={pageStyle}>
 
       {/* ── Greeting ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>

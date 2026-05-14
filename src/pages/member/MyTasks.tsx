@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { TicketStatus, TaskStatus } from '../../types';
 
 /* ── helpers ── */
@@ -185,6 +187,7 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 function TaskCard({ task }: { task: TaskRow }) {
+  const isMobile = useIsMobile();
   const color   = TASK_COLOR[task.status] ?? 'var(--text3)';
   const today   = localToday();
   const overdue = task.due_date && task.status !== 'Done' && task.due_date < today;
@@ -194,11 +197,14 @@ function TaskCard({ task }: { task: TaskRow }) {
       background: 'var(--bg2)',
       border: `1px solid ${task.status === 'Blocked' ? 'var(--red)33' : overdue ? 'var(--amber)33' : 'var(--border)'}`,
       borderRadius: 10, padding: '12px 16px',
-      display: 'flex', alignItems: 'center', gap: 14,
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      alignItems: isMobile ? 'stretch' : 'center',
+      gap: isMobile ? 10 : 14,
     }}>
       {/* Priority */}
       <div style={{
-        width: 24, flexShrink: 0, textAlign: 'center',
+        width: isMobile ? 'auto' : 24, flexShrink: 0, textAlign: isMobile ? 'left' : 'center',
         fontSize: 10, fontWeight: 800,
         color: task.priority === 1 ? 'var(--red)' : 'var(--text3)',
       }}>
@@ -248,10 +254,10 @@ function TaskCard({ task }: { task: TaskRow }) {
         </div>
       </div>
 
-      {/* Status */}
       <span style={{
-        fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+        fontSize: 10, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
         background: `${color}18`, border: `1px solid ${color}33`, color, flexShrink: 0,
+        alignSelf: isMobile ? 'flex-start' : 'center',
       }}>
         {task.status}
       </span>
@@ -262,6 +268,8 @@ function TaskCard({ task }: { task: TaskRow }) {
 /* ── Main ── */
 export default function MyTasks() {
   const { member } = useAuth();
+  const isMobile = useIsMobile();
+  const pageStyle = usePageShellStyle({ maxWidth: 960, gap: 20 });
 
   const [tab, setTab]   = useState<'tickets' | 'tasks'>('tickets');
   const [loading, setLoading] = useState(true);
@@ -329,10 +337,10 @@ export default function MyTasks() {
   const activeTicketCount = tickets.filter(t => !['DEPLOYED', 'NO_ACTION'].includes(t.status)).length;
   const activeTaskCount   = tasks.filter(t => t.status !== 'Done').length;
 
-  if (loading) return <div style={{ padding: 32, color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 'max(24px, env(safe-area-inset-top)) 16px', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 960, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={pageStyle}>
 
       {/* ── Header ── */}
       <div>
@@ -349,7 +357,7 @@ export default function MyTasks() {
       </div>
 
       {/* ── Filters ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 10 }}>
         {tab === 'tickets' ? (
           <>
             <Pill label="All" active={!ticketFilter} onClick={() => setTicketFilter('')} />
@@ -383,10 +391,14 @@ export default function MyTasks() {
           onChange={e => setSearch(e.target.value)}
           placeholder={tab === 'tickets' ? 'Search ref or description…' : 'Search title or ref…'}
           style={{
-            marginLeft: 'auto', padding: '6px 12px', borderRadius: 7,
+            marginLeft: isMobile ? 0 : 'auto',
+            flex: isMobile ? '1 1 100%' : '0 0 auto',
+            minWidth: isMobile ? 0 : 200,
+            maxWidth: isMobile ? '100%' : 280,
+            padding: '8px 12px', borderRadius: 7,
             border: '1px solid var(--border2)', background: 'var(--bg2)',
-            color: 'var(--text)', fontSize: 12, outline: 'none',
-            fontFamily: 'var(--font-sans)', width: 200,
+            color: 'var(--text)', fontSize: 16, outline: 'none',
+            fontFamily: 'var(--font-sans)',
           }}
         />
       </div>
