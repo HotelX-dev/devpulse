@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
   const { signIn, member } = useAuth();
-  const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,8 +16,7 @@ export default function Login() {
       member.role === 'manager'    ? '/manager/dashboard' :
       member.role === 'management' ? '/management/overview' :
       '/member/dashboard';
-    navigate(dest, { replace: true });
-    return null;
+    return <Navigate to={dest} replace />;
   }
 
   async function handleSubmit(e: React.FormEvent) {

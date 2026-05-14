@@ -981,3 +981,556 @@ CREATE TRIGGER on_ticket_import
   AFTER INSERT ON ticket_imports
   FOR EACH ROW EXECUTE FUNCTION link_orphan_standups();
 ```
+
+---
+
+## Additional Features
+
+### Feature 1 — Blocker Tracker
+
+**Problem:** Blockers mentioned in standup get forgotten — no follow-up, no accountability.
+
+**How it works:**
+```
+When member submits standup with a blocker (blockers field not empty)
+→ System auto-creates a blocker record
+→ Manager sees it in dashboard blocker panel
+→ Manager assigns follow-up action + owner
+→ Blocker stays visible until manually resolved
+```
+
+**Schema addition — `blockers` table:**
+```sql
+CREATE TABLE blockers (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  standup_log_id  uuid REFERENCES standup_logs(id),
+  member_id       uuid REFERENCES members(id),
+  product_id      uuid REFERENCES products(id),
+  ticket_ref      text,
+  description     text NOT NULL,         -- copied from standup blockers field
+  action_required text,                  -- manager fills this in
+  assigned_to     uuid REFERENCES members(id),  -- who resolves it
+  status          text DEFAULT 'Open' CHECK (status IN ('Open','In Progress','Resolved')),
+  raised_at       date NOT NULL DEFAULT CURRENT_DATE,
+  resolved_at     timestamptz,
+  created_at      timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_blockers_status    ON blockers(status);
+CREATE INDEX idx_blockers_member    ON blockers(member_id);
+CREATE INDEX idx_blockers_product   ON blockers(product_id);
+```
+
+**Dashboard panel — Blocker Tracker:**
+```
+Shows all unresolved blockers sorted by age (oldest first)
+
+Columns:
+  Member | Product | Description | Raised | Days open | Action | Owner | Status
+
+Colour coding:
+  1–2 days  → amber
+  3–5 days  → red
+  6+ days   → dark red + HIGH alert
+
+Alert trigger:
+  Blocker unresolved for 3+ days → INSERT alert (STALE_BLOCKER, severity=HIGH)
+```
+
+**Member view:**
+```
+Member sees their own open blockers only
+Status shown on My Dashboard
+Resolved blockers archived — visible in history
+```
+
+**RLS:**
+```sql
+-- Manager sees all blockers
+CREATE POLICY "blockers_manager_all" ON blockers
+  FOR ALL USING (get_my_role() = 'manager');
+
+-- Member sees own blockers only
+CREATE POLICY "blockers_member_own" ON blockers
+  FOR SELECT USING (member_id = auth.uid());
+```
+
+**Alert rule addition:**
+```
+STALE_BLOCKER
+  Trigger : blocker status = Open or In Progress AND raised_at 3+ days ago
+  Severity: HIGH
+  Message : "{member} blocker unresolved for {N} days — {description}"
+```
+
+---
+
+### Feature 2 — Ticket Age Heatmap
+
+**Problem:** You know tickets are open but not how long each one has been sitting — stale tickets are invisible until they blow up.
+
+**How it works:**
+```
+On the manager dashboard — ticket list view shows age column
+Age = today - created_ts (for OPEN/IN_PROGRESS tickets)
+     today - mod_ts      (for tickets with no recent activity)
+
+Colour coding:
+  < 7 days   → green   (fresh)
+  7–14 days  → amber   (watch)
+  15–30 days → red     (overdue)
+  > 30 days  → dark red + auto-alert (critical)
+```
+
+**No new table needed — computed on the fly from ticket_imports:**
+```sql
+-- Age computed column (add to ticket query)
+SELECT
+  *,
+  CURRENT_DATE - created_ts::date AS age_days,
+  CASE
+    WHEN CURRENT_DATE - created_ts::date < 7  THEN 'fresh'
+    WHEN CURRENT_DATE - created_ts::date < 15 THEN 'watch'
+    WHEN CURRENT_DATE - created_ts::date < 30 THEN 'overdue'
+    ELSE 'critical'
+  END AS age_band
+FROM ticket_imports
+WHERE status NOT IN ('DEPLOYED', 'NO_ACTION');
+```
+
+**Dashboard additions:**
+```
+1. Ticket Age Distribution chart (bar chart)
+   X-axis: age bands (Fresh / Watch / Overdue / Critical)
+   Y-axis: ticket count
+   Colour: green / amber / red / dark red
+
+2. Age column on outstanding ticket table
+   Shows: "23 days" with colour badge
+
+3. Critical tickets panel (> 30 days)
+   Sorted by age descending
+   Shows: ticket ref, description, assignee, customer, age
+```
+
+**Alert rule addition:**
+```
+TICKET_AGED_CRITICAL
+  Trigger : ticket age > 30 days AND status NOT IN (DEPLOYED, NO_ACTION)
+  Severity: HIGH
+  Message : "{ticket_ref} has been open for {N} days — {customer_name}"
+  Checked : daily at 7PM Edge Function
+```
+
+**Edge Function update — add to 7PM daily job:**
+```typescript
+// Check for critically aged tickets
+const agedTickets = await supabase
+  .from('ticket_imports')
+  .select('*')
+  .not('status', 'in', '("DEPLOYED","NO_ACTION")')
+  .lt('created_ts', subDays(new Date(), 30).toISOString());
+
+for (const ticket of agedTickets) {
+  await insertAlert('TICKET_AGED_CRITICAL', null, ticket.id, null, 'HIGH',
+    `${ticket.ticket_ref} open for ${ageDays} days — ${ticket.customer_name}`
+  );
+}
+```
+
+**TypeScript addition:**
+```typescript
+type AgeBand = 'fresh' | 'watch' | 'overdue' | 'critical';
+
+interface TicketWithAge extends TicketImport {
+  age_days: number;
+  age_band: AgeBand;
+}
+```
+
+---
+
+### Feature 3 — Delivery Commitment Tracker
+
+**Problem:** Tasks have due dates but no record of what was originally committed — you can't tell if delivery is on time, late, or early without digging through history.
+
+**How it works:**
+```
+When manager sets a due_date on a task or ticket
+→ System records committed_date = that due_date at time of setting
+→ If due_date is later changed → committed_date stays unchanged
+→ When task closes → actual_delivery_date recorded
+
+Dashboard shows:
+  Committed date | Actual date | Variance | On time?
+  2026-05-15     | 2026-05-18  | +3 days  | ❌ Late
+  2026-05-20     | 2026-05-19  | -1 day   | ✅ Early
+```
+
+**Schema addition — add columns to `tasks` and `ticket_imports`:**
+```sql
+-- Add to tasks table
+ALTER TABLE tasks ADD COLUMN committed_date    date;
+ALTER TABLE tasks ADD COLUMN actual_delivery   date;
+ALTER TABLE tasks ADD COLUMN variance_days     int
+  GENERATED ALWAYS AS (actual_delivery - committed_date) STORED;
+
+-- Add to ticket_imports table
+ALTER TABLE ticket_imports ADD COLUMN committed_date   date;
+ALTER TABLE ticket_imports ADD COLUMN actual_delivery  date;
+ALTER TABLE ticket_imports ADD COLUMN variance_days    int
+  GENERATED ALWAYS AS (actual_delivery - committed_date) STORED;
+```
+
+**Trigger — lock committed_date on first set:**
+```sql
+-- Only set committed_date once — never overwrite
+CREATE OR REPLACE FUNCTION lock_committed_date()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.committed_date IS NULL AND NEW.due_date IS NOT NULL THEN
+    NEW.committed_date = NEW.due_date;
+  END IF;
+  IF NEW.status = 'Done' AND NEW.actual_delivery IS NULL THEN
+    NEW.actual_delivery = CURRENT_DATE;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_committed_date
+  BEFORE UPDATE ON tasks
+  FOR EACH ROW EXECUTE FUNCTION lock_committed_date();
+```
+
+**Dashboard additions:**
+```
+1. Team delivery accuracy KPI card (new metric)
+   This month: 71% on time
+   Last month: 68% on time
+   Trend: ↑ improving
+
+2. Delivery commitment table (in Tasks module)
+   Columns: Task | Committed | Actual | Variance | Status
+   Filter:  This month | Last month | By product | By member
+   Sort:    Worst variance first (most overdue at top)
+
+3. Monthly management report row
+   "Delivery accuracy: X% — Y tasks on time out of Z committed"
+```
+
+**Monthly snapshot addition:**
+```sql
+-- Add to monthly_snapshot table
+ALTER TABLE monthly_snapshot ADD COLUMN tasks_committed    int DEFAULT 0;
+ALTER TABLE monthly_snapshot ADD COLUMN tasks_on_time      int DEFAULT 0;
+ALTER TABLE monthly_snapshot ADD COLUMN tasks_late         int DEFAULT 0;
+ALTER TABLE monthly_snapshot ADD COLUMN delivery_accuracy  numeric DEFAULT 0;
+-- delivery_accuracy = tasks_on_time / tasks_committed * 100
+```
+
+**TypeScript addition:**
+```typescript
+interface DeliveryRecord {
+  task_id: string;
+  title: string;
+  committed_date: string;
+  actual_delivery: string | null;
+  variance_days: number | null;   -- negative = early, positive = late
+  on_time: boolean | null;        -- null if not yet delivered
+}
+
+interface DeliveryAccuracy {
+  month: string;
+  product_id: string;
+  committed: number;
+  on_time: number;
+  late: number;
+  accuracy_pct: number;
+}
+```
+
+**Alert rule addition:**
+```
+DELIVERY_AT_RISK
+  Trigger : task due_date is within 2 days AND status != Done
+  Severity: MEDIUM → HIGH on due date
+  Message : "{task title} due in {N} days — assigned to {member}"
+  Checked : daily at 7PM Edge Function
+```
+
+---
+
+## Updated Alert Types
+
+```sql
+-- Update alerts table CHECK constraint to include new types
+ALTER TABLE alerts DROP CONSTRAINT alerts_type_check;
+ALTER TABLE alerts ADD CONSTRAINT alerts_type_check
+  CHECK (type IN (
+    'MISSING_STANDUP',
+    'STALE_TICKET',
+    'ADHOC_OVERLOAD',
+    'BACKLOG_GROWING',
+    'STALE_BLOCKER',
+    'TICKET_AGED_CRITICAL',
+    'DELIVERY_AT_RISK'
+  ));
+```
+
+---
+
+## Updated TypeScript AlertType
+
+```typescript
+type AlertType =
+  | 'MISSING_STANDUP'
+  | 'STALE_TICKET'
+  | 'ADHOC_OVERLOAD'
+  | 'BACKLOG_GROWING'
+  | 'STALE_BLOCKER'
+  | 'TICKET_AGED_CRITICAL'
+  | 'DELIVERY_AT_RISK';
+```
+
+---
+
+## Updated Build Phases
+
+| Phase | What | Additional work from new features |
+|---|---|---|
+| 4 | Manager dashboard | Add ticket age heatmap + age distribution chart + delivery accuracy KPI |
+| 5 | Standup logger | Auto-create blocker record when blockers field is not empty |
+| 6 | Tasks module | Add committed_date lock + delivery commitment table |
+| 10 | Edge Functions | Add STALE_BLOCKER + TICKET_AGED_CRITICAL + DELIVERY_AT_RISK checks to 7PM job |
+
+---
+
+## Weekly Meeting Structure (After System Is Live)
+
+```
+Day:       Monday
+Time:      2:00 PM (after lunch — all members in by 11AM, standup submitted by noon)
+Duration:  30 minutes strict
+Attendees: Chia + all 8 members
+```
+
+### Monday Standup Deadline
+```
+Normal days:  Submit standup before 7PM (Edge Function runs)
+Monday only:  Submit standup by 12PM noon
+Reason:       Manager reviews Devpulse alerts 12PM–2PM before meeting
+```
+
+### Meeting Agenda
+
+| Time | Segment | Who |
+|---|---|---|
+| 0–5 min | Last week recap — what shipped | Manager reads from dashboard |
+| 5–10 min | This week's focus per product | Manager assigns priorities |
+| 10–20 min | Blocker round — 1 min per person | Each member |
+| 20–25 min | Adhoc + unplanned work check | Manager + affected members |
+| 25–30 min | Actions + owners confirmed | Manager closes |
+
+### Blocker Round Rules
+```
+Each member answers 2 questions only:
+  1. Any blocker stopping you this week?
+  2. Any task you need help on?
+
+NOT "what did you do" → that is in Devpulse already
+NOT "what are you doing" → that is in their task list
+Meeting = blockers + decisions only
+```
+
+### What to Show on Screen
+```
+Screen 1 → Dashboard KPIs + alerts
+Screen 2 → Outstanding tasks due this week
+Screen 3 → Team workload heatmap
+Screen 4 → Open blockers list
+```
+
+### After Meeting (5 min — manager only)
+```
+1. Reassign tasks if needed → update in Tasks module
+2. New adhoc tasks discussed → log immediately
+3. Blockers actioned → update blocker tracker
+4. Unresolved items → carry forward with owner name
+```
+
+### Ground Rules for Team
+```
+1. Standup submitted every day — no exceptions
+2. Monday standup by 12PM noon
+3. Blockers logged same day in standup — not held for Monday
+4. Adhoc tasks logged same day — if not in Devpulse it does not exist
+5. Meeting starts and ends on time
+6. One-on-one issues handled privately — not in group meeting
+```
+
+---
+
+## Import Schedule & Types
+
+### Two Import Cadences
+
+```
+Weekly Refresh    → every Monday by 10AM before 2PM team meeting
+Monthly Close     → day before management meeting (once a month)
+```
+
+### Import Type Selection
+
+On the import screen, manager selects import type before uploading:
+
+```
+Import type:
+  ○ Weekly Refresh   → operational data only
+  ○ Monthly Close    → operational data + analytics + forecast
+```
+
+### Weekly Refresh (Every Monday by 10AM)
+
+```
+Purpose:      Keep operational data fresh for weekly team meeting
+Triggers:
+  ✅ Insert / update ticket_imports
+  ✅ Recalculate ticket age bands
+  ✅ Refresh alerts (STALE_TICKET, TICKET_AGED_CRITICAL, DELIVERY_AT_RISK)
+  ✅ Update last_imported_at timestamp per product
+  ❌ Does NOT compute monthly_snapshot
+  ❌ Does NOT recalculate forecast
+  ❌ Does NOT stamp imported_month
+
+Monday flow:
+  9:00 AM  Download CSV from company system (per product)
+  9:30 AM  Upload to Devpulse → select Weekly Refresh → preview → confirm
+  10:00 AM Data fresh — ticket ages accurate
+  12:00 PM Standup deadline for team
+  2:00 PM  Weekly meeting — all data current
+```
+
+### Monthly Close (Day Before Management Meeting)
+
+```
+Purpose:      Full month analytics for management meeting
+Triggers:
+  ✅ Insert / update ticket_imports
+  ✅ Recalculate ticket age bands
+  ✅ Refresh all alerts
+  ✅ Stamp imported_month on all rows
+  ✅ Compute monthly_snapshot per product
+  ✅ Recalculate 6-month rolling forecast (optimistic/expected/pessimistic)
+  ✅ Update delivery accuracy stats in monthly_snapshot
+  ✅ Check BACKLOG_GROWING — insert alert if triggered
+  ✅ Management dashboard ready for presentation
+```
+
+### Staleness Warning
+
+```
+Dashboard shows warning banner if last import > 7 days old:
+
+  ┌──────────────────────────────────────────────────┐
+  │ ⚠️ HotelX data is 8 days old — last imported     │
+  │    Mon 12 May 2026 · Import now to refresh        │
+  └──────────────────────────────────────────────────┘
+
+Stored in products table:
+```
+
+```sql
+-- Add to products table
+ALTER TABLE products ADD COLUMN last_imported_at  timestamptz;
+ALTER TABLE products ADD COLUMN last_import_type  text CHECK (
+  last_import_type IN ('weekly_refresh', 'monthly_close')
+);
+
+-- Staleness computed in frontend
+const isStale = differenceInDays(new Date(), last_imported_at) > 7;
+```
+
+### Import Screen UI Flow
+
+```
+Step 1 — Select product
+  ○ HotelX  ○ MenuX  ○ EventX  ○ AccountX
+
+Step 2 — Select import type
+  ○ Weekly Refresh   (operational data only)
+  ○ Monthly Close    (full analytics + forecast)
+    └── If Monthly Close selected → show month picker
+        Represents month: [May 2026 ▾]
+
+Step 3 — Upload file
+  Drag & drop or browse · .xlsx or .csv
+
+Step 4 — Preview parsed rows
+  Shows: ticket count, status breakdown, assignee matches
+  Warnings: unmatched assignees (not in member_ticket_map)
+
+Step 5 — Confirm import
+  Weekly Refresh → "Import X tickets"
+  Monthly Close  → "Import X tickets + compute May snapshot"
+```
+
+### Schema Addition — Import Log
+
+```sql
+-- Track every import for audit trail
+CREATE TABLE import_log (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id      uuid REFERENCES products(id),
+  import_type     text CHECK (import_type IN ('weekly_refresh','monthly_close')),
+  imported_month  date,                    -- monthly close only
+  row_count       int,
+  matched_count   int,                     -- rows with matched member
+  unmatched_count int,                     -- rows with no member match
+  imported_by     uuid REFERENCES members(id),
+  imported_at     timestamptz DEFAULT now()
+);
+```
+
+### TypeScript Additions
+
+```typescript
+type ImportType = 'weekly_refresh' | 'monthly_close';
+
+interface ImportSession {
+  product_id:     string;
+  import_type:    ImportType;
+  imported_month: string | null;  -- monthly close only
+  rows:           TicketImport[];
+  matched:        number;
+  unmatched:      number;
+  unmatched_raw:  string[];       -- raw assignee strings with no member match
+}
+
+interface ImportResult {
+  success:        boolean;
+  rows_imported:  number;
+  snapshot_computed: boolean;     -- true only for monthly close
+  alerts_fired:   number;
+  warnings:       string[];       -- unmatched assignees etc.
+}
+```
+
+### Updated Build Phase 3
+
+```
+Phase 3 — CSV Import module
+
+  3a. File upload component — drag & drop, .xlsx + .csv support
+  3b. Import type selector — Weekly Refresh vs Monthly Close
+  3c. Month picker — shown only for Monthly Close
+  3d. CSV parser — HYPERLINK extraction, column mapping
+  3e. assignedToName parser — match via member_ticket_map
+  3f. Preview screen — row count, status breakdown, unmatched warnings
+  3g. Confirm & import — upsert ticket_imports
+  3h. Post-import trigger:
+        Weekly:  update last_imported_at, recalculate age bands, refresh alerts
+        Monthly: all of above + compute monthly_snapshot + forecast
+  3i. Import log — record every import in import_log table
+  3j. Staleness banner — show on dashboard if last import > 7 days
+```

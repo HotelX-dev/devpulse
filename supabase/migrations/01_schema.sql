@@ -43,7 +43,7 @@ CREATE TABLE ticket_imports (
   is_enhancement       boolean DEFAULT false,
   priority             int CHECK (priority IN (1,2)),
   status               text CHECK (status IN (
-                         'OPEN','IN_PROGRESS','QC','NO_ACTION','DEPLOYED','REOPEN'
+                         'OPEN','IN_PROGRESS','QC','NO_ACTION','DEPLOYED','REOPEN','TO_DEPLOY'
                        )),
   is_deployed          boolean DEFAULT false,
   raw_assignee         text,
@@ -76,8 +76,9 @@ CREATE TABLE standup_logs (
   today        text,
   blockers     text,
   hours_spent  numeric CHECK (hours_spent >= 0 AND hours_spent <= 24),
-  ticket_ref   text,
-  created_at   timestamptz DEFAULT now(),
+  ticket_ref        text,
+  linked_ticket_id  uuid REFERENCES ticket_imports(id) ON DELETE SET NULL,
+  created_at        timestamptz DEFAULT now(),
   UNIQUE(member_id, date)
 );
 

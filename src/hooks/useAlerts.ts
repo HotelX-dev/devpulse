@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Alert } from '../types';
 import { useAuth } from './useAuth';
@@ -7,8 +7,9 @@ export function useAlerts() {
   const { member } = useAuth();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  async function fetchAlerts() {
+  const fetchAlerts = useCallback(async () => {
     if (!member) return;
     let query = supabase
       .from('alerts')
@@ -16,7 +17,6 @@ export function useAlerts() {
       .eq('resolved', false)
       .order('created_at', { ascending: false });
 
-    // Members only see their own alerts; manager sees all
     if (member.role === 'member') {
       query = query.eq('member_id', member.id);
     }
@@ -24,20 +24,27 @@ export function useAlerts() {
     const { data } = await query;
     setAlerts(data ?? []);
     setLoading(false);
-  }
+  }, [member]);
 
   useEffect(() => {
     fetchAlerts();
 
+    // Unique name per effect invocation prevents StrictMode double-mount collisions
+    const channelName = `alerts-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel('alerts-realtime')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, () => {
         fetchAlerts();
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [member]);
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
+  }, [fetchAlerts]);
 
   return { alerts, loading };
 }
