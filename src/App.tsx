@@ -128,10 +128,13 @@ function LoadingScreen() {
 /* ── Root ── */
 
 export default function App() {
+  const basename =
+    import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
+
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={basename}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<RootRedirect />} />
