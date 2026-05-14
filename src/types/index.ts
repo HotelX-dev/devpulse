@@ -87,6 +87,8 @@ export interface LeaveLog {
   type: LeaveType;
   reason: string | null;
   submitted_by: string;
+  is_half_day: boolean;
+  half_day_period: 'AM' | 'PM' | null;
   created_at: string;
 }
 

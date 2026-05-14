@@ -46,7 +46,8 @@ function fmtDateRange(start: string, end: string): string {
   return `${s.toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
 
-function countDays(start: string, end: string): number {
+function countDays(start: string, end: string, isHalfDay = false): number {
+  if (isHalfDay) return 0.5;
   const s = new Date(start + 'T00:00:00');
   const e = new Date(end   + 'T00:00:00');
   return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
@@ -91,22 +92,28 @@ function LeaveBadge({ type }: { type: LeaveType }) {
 }
 
 /* ── Modal ── */
+type LeaveInsert = Omit<LeaveLogType, 'id' | 'created_at'>;
+
 interface LeaveFormProps {
   members: Member[];
   managerId: string;
-  onSave: (row: Omit<LeaveLogType, 'id' | 'created_at'>) => Promise<void>;
+  onSave: (row: LeaveInsert) => Promise<void>;
   onClose: () => void;
 }
 
 function LeaveModal({ members, managerId, onSave, onClose }: LeaveFormProps) {
   const [form, setForm] = useState({
-    member_id:    '',
-    type:         'Annual Leave' as LeaveType,
-    start_date:   localToday(),
-    end_date:     localToday(),
-    reason:       '',
-    submitted_by: managerId,
+    member_id:       '',
+    type:            'Annual Leave' as LeaveType,
+    start_date:      localToday(),
+    end_date:        localToday(),
+    reason:          '',
+    submitted_by:    managerId,
+    is_half_day:     false,
+    half_day_period: 'AM' as 'AM' | 'PM',
   });
+
+  const isSameDay = form.start_date === form.end_date;
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
@@ -114,10 +121,15 @@ function LeaveModal({ members, managerId, onSave, onClose }: LeaveFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.member_id)                       { setError('Select a team member.'); return; }
-    if (form.end_date < form.start_date)       { setError('End date must be on or after start date.'); return; }
+    if (!form.member_id)                 { setError('Select a team member.'); return; }
+    if (form.end_date < form.start_date) { setError('End date must be on or after start date.'); return; }
     setSaving(true); setError('');
-    await onSave(form);
+    const isHalf = isSameDay && form.is_half_day;
+    await onSave({
+      ...form,
+      is_half_day:     isHalf,
+      half_day_period: isHalf ? form.half_day_period : null,
+    });
     setSaving(false);
   }
 
@@ -219,14 +231,67 @@ function LeaveModal({ members, managerId, onSave, onClose }: LeaveFormProps) {
             </div>
           </div>
 
+          {/* Half-day toggle — only shown when start = end */}
+          {isSameDay && (
+            <div>
+              <label style={labelStyle}>Duration</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([false, true] as const).map(half => (
+                  <button
+                    key={String(half)}
+                    type="button"
+                    onClick={() => patch({ is_half_day: half })}
+                    style={{
+                      flex: 1, padding: '8px 4px', borderRadius: 8,
+                      border: `1px solid ${form.is_half_day === half ? 'var(--accent)' : 'var(--border2)'}`,
+                      background: form.is_half_day === half ? 'var(--accent-dim)' : 'transparent',
+                      color: form.is_half_day === half ? 'var(--accent)' : 'var(--text3)',
+                      fontSize: 13, fontWeight: form.is_half_day === half ? 700 : 400,
+                      cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.1s',
+                    }}
+                  >
+                    {half ? 'Half day (0.5)' : 'Full day (1)'}
+                  </button>
+                ))}
+              </div>
+              {form.is_half_day && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  {(['AM', 'PM'] as const).map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => patch({ half_day_period: p })}
+                      style={{
+                        flex: 1, padding: '7px 4px', borderRadius: 8,
+                        border: `1px solid ${form.half_day_period === p ? 'var(--pink)' : 'var(--border2)'}`,
+                        background: form.half_day_period === p ? 'var(--pink-dim)' : 'transparent',
+                        color: form.half_day_period === p ? 'var(--pink)' : 'var(--text3)',
+                        fontSize: 13, fontWeight: form.half_day_period === p ? 700 : 400,
+                        cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.1s',
+                      }}
+                    >
+                      {p === 'AM' ? 'AM (morning)' : 'PM (afternoon)'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Day count preview */}
           {form.start_date && form.end_date && form.start_date <= form.end_date && (
             <div style={{
               fontSize: 12, color: 'var(--text2)', background: 'var(--bg3)',
               borderRadius: 7, padding: '6px 12px', border: '1px solid var(--border)',
             }}>
-              {countDays(form.start_date, form.end_date)} day{countDays(form.start_date, form.end_date) !== 1 ? 's' : ''}
+              {(() => {
+                const d = countDays(form.start_date, form.end_date, isSameDay && form.is_half_day);
+                return `${d} day${d !== 1 ? 's' : ''}`;
+              })()}
               {' '}· {fmtDateRange(form.start_date, form.end_date)}
+              {isSameDay && form.is_half_day && (
+                <span style={{ color: 'var(--pink)', fontWeight: 600 }}> · {form.half_day_period}</span>
+              )}
             </div>
           )}
 
@@ -281,7 +346,7 @@ function LeaveCard({
   onDelete: () => void;
 }) {
   const today   = isOnLeaveToday(row);
-  const days    = countDays(row.start_date, row.end_date);
+  const days    = countDays(row.start_date, row.end_date, row.is_half_day);
   const isPast  = row.end_date < localToday();
 
   return (
@@ -304,6 +369,14 @@ function LeaveCard({
             {member?.name ?? '—'}
           </span>
           <LeaveBadge type={row.type as LeaveType} />
+          {row.is_half_day && row.half_day_period && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: 'var(--pink)',
+              background: 'var(--pink-dim)', borderRadius: 4, padding: '2px 6px',
+            }}>
+              ½ {row.half_day_period}
+            </span>
+          )}
           {today && (
             <span style={{
               fontSize: 10, fontWeight: 700, color: 'var(--amber)',
@@ -383,7 +456,7 @@ export default function LeaveLog() {
     setLoading(false);
   }
 
-  async function handleSave(row: Omit<LeaveLogType, 'id' | 'created_at'>) {
+  async function handleSave(row: LeaveInsert) {
     await supabase.from('leave_log').insert(row);
     setShowModal(false);
     loadLeaves();
