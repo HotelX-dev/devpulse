@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAlerts } from '../../hooks/useAlerts';
+import { formatDate } from '../../lib/utils';
 import MetricCard from '../../components/UI/MetricCard';
 import AlertBanner from '../../components/UI/AlertBanner';
 import ProductTabs from '../../components/UI/ProductTabs';
@@ -21,6 +23,13 @@ function fmtMonth(ym: string): string {
   if (!ym) return '';
   const [y, m] = ym.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('en-MY', { month: 'long', year: 'numeric' });
+}
+
+function daysSinceImport(iso: string | null | undefined): number {
+  if (!iso) return 999;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return 999;
+  return Math.floor((Date.now() - t) / 86_400_000);
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -100,7 +109,12 @@ export default function ManagerDashboard() {
       .select('imported_month')
       .eq('product_id', selectedProduct)
       .then(({ data }) => {
-        const months = [...new Set((data ?? []).map(r => (r.imported_month as string).slice(0, 7)))]
+        const months = [...new Set(
+          (data ?? [])
+            .map(r => r.imported_month)
+            .filter((v): v is string => v != null && String(v).length >= 7)
+            .map(v => String(v).slice(0, 7)),
+        )]
           .sort()
           .reverse();
         setAvailableMonths(months);
@@ -146,7 +160,9 @@ export default function ManagerDashboard() {
       // Aggregate chart data by month
       const monthMap = new Map<string, { active: number; deployed: number }>();
       for (const t of allTix ?? []) {
-        const m = (t.imported_month as string).slice(0, 7);
+        const raw = t.imported_month as string | null;
+        if (raw == null || String(raw).length < 7) continue;
+        const m = String(raw).slice(0, 7);
         if (!monthMap.has(m)) monthMap.set(m, { active: 0, deployed: 0 });
         const entry = monthMap.get(m)!;
         if (t.status === 'DEPLOYED') entry.deployed++;
@@ -184,6 +200,12 @@ export default function ManagerDashboard() {
   }
 
   const productName = products.find(p => p.id === selectedProduct)?.name ?? '';
+  const selectedProductMeta = useMemo(
+    () => products.find(p => p.id === selectedProduct),
+    [products, selectedProduct],
+  );
+  const staleDays = daysSinceImport(selectedProductMeta?.last_imported_at ?? null);
+  const importStale = !selectedProductMeta?.last_imported_at || staleDays > 7;
   const unresolved = alerts.filter(a => !a.resolved);
 
   if (loading && products.length === 0) {
@@ -196,6 +218,32 @@ export default function ManagerDashboard() {
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 28 }}>
+
+      {selectedProduct && importStale && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+          padding: '12px 16px', borderRadius: 10,
+          background: 'var(--amber-dim)', border: '1px solid var(--amber)44',
+          fontSize: 13, color: 'var(--amber)',
+        }}>
+          <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ flex: 1, lineHeight: 1.5 }}>
+            <strong style={{ color: 'var(--text)' }}>{productName || 'This product'}</strong>
+            {' '}ticket data is{' '}
+            {!selectedProductMeta?.last_imported_at
+              ? 'missing a recorded import'
+              : `${staleDays} days old (last imported ${formatDate(selectedProductMeta.last_imported_at)})`}
+            .{' '}
+            <Link
+              to="/manager/import"
+              style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'underline' }}
+            >
+              Import now to refresh
+            </Link>
+            .
+          </div>
+        </div>
+      )}
 
       {/* ── Header: product tabs + month nav ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>

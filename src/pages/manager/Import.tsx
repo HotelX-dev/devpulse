@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { parseCSV, type ParsedTicket } from '../../lib/csvParser';
+import { parseCSV, workbookBytesToCsv, type ParsedTicket } from '../../lib/csvParser';
 import Badge from '../../components/UI/Badge';
-import type { Product } from '../../types';
+import type { ImportType, Product } from '../../types';
 
 type Step = 1 | 2 | 3;
+
+function currentYearMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 interface MemberInfo {
   id: string;
@@ -104,12 +109,15 @@ function Btn({
   );
 }
 
-/* ── Step 1: product + month + optional date filter ── */
+/* ── Step 1: product + import type + month + optional date filter ── */
 function StepSetup({
-  products, productId, setProductId, month, setMonth,
+  products, productId, setProductId,
+  importType, setImportType,
+  month, setMonth,
   dateFrom, setDateFrom, dateTo, setDateTo, onNext,
 }: {
   products: Product[]; productId: string; setProductId: (v: string) => void;
+  importType: ImportType; setImportType: (v: ImportType) => void;
   month: string; setMonth: (v: string) => void;
   dateFrom: string; setDateFrom: (v: string) => void;
   dateTo: string; setDateTo: (v: string) => void;
@@ -124,30 +132,69 @@ function StepSetup({
 
   return (
     <Card>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 480 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
-              Product
-            </label>
-            <select value={productId} onChange={e => setProductId(e.target.value)} style={fieldStyle}>
-              <option value="">Select product…</option>
-              {products.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560 }}>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
+            Product
+          </label>
+          <select value={productId} onChange={e => setProductId(e.target.value)} style={fieldStyle}>
+            <option value="">Select product…</option>
+            {products.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
 
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
-              Import Month
-            </label>
-            <input
-              type="month"
-              value={month}
-              onChange={e => setMonth(e.target.value)}
-              style={fieldStyle}
-            />
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
+            Import type
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {([
+              { id: 'weekly_refresh' as const, title: 'Weekly refresh', sub: 'Operational ticket data only. No monthly snapshot or forecast run.' },
+              { id: 'monthly_close' as const, title: 'Monthly close', sub: 'Same as weekly, plus compute monthly snapshot and rolling forecast for the selected month.' },
+            ]).map(opt => (
+              <label
+                key={opt.id}
+                style={{
+                  display: 'flex', gap: 12, padding: 12, borderRadius: 8, cursor: 'pointer',
+                  border: importType === opt.id ? '1px solid var(--accent)' : '1px solid var(--border2)',
+                  background: importType === opt.id ? 'var(--accent-dim)' : 'var(--bg3)',
+                }}
+              >
+                <input
+                  type="radio"
+                  name="importType"
+                  checked={importType === opt.id}
+                  onChange={() => {
+                    setImportType(opt.id);
+                    if (opt.id === 'weekly_refresh') setMonth(currentYearMonth());
+                  }}
+                  style={{ marginTop: 3, accentColor: 'var(--accent)' }}
+                />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{opt.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4, lineHeight: 1.45 }}>{opt.sub}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
+            {importType === 'monthly_close' ? 'Close month' : 'Reporting month'}
+          </label>
+          <input
+            type="month"
+            value={month}
+            onChange={e => setMonth(e.target.value)}
+            style={fieldStyle}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+            {importType === 'monthly_close'
+              ? 'Must match the month you are closing for management reporting.'
+              : 'Tickets for this product replace existing rows for this month on the dashboard.'}
           </div>
         </div>
 
@@ -253,18 +300,18 @@ function StepUpload({
           <Upload size={22} color="var(--accent)" />
         </div>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>Drop your CSV here</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>Drop CSV or Excel here</div>
           <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>or click to browse</div>
         </div>
         <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-          Accepts .csv exports from the ticket system
+          Accepts .csv, .xlsx, or .xls exports from the ticket system
         </div>
       </div>
 
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); }}
       />
@@ -279,15 +326,22 @@ function StepUpload({
 /* ── Step 3: preview + confirm ── */
 function StepPreview({
   rows, totalParsed, members, productName, month, existingCount,
-  importing, onConfirm, onBack,
+  importing, importType, onConfirm, onBack,
 }: {
   rows: ParsedTicket[]; totalParsed: number; members: Map<string, MemberInfo>;
   productName: string; month: string; existingCount: number;
-  importing: boolean; onConfirm: () => void; onBack: () => void;
+  importing: boolean; importType: ImportType;
+  onConfirm: () => void; onBack: () => void;
 }) {
   const matched   = rows.filter(r => r.assignee_matched).length;
   const unmatched = rows.length - matched;
   const filtered  = totalParsed - rows.length;
+
+  const statusBreakdown: Record<string, number> = {};
+  for (const r of rows) {
+    statusBreakdown[r.status] = (statusBreakdown[r.status] ?? 0) + 1;
+  }
+  const statusOrder = ['OPEN', 'IN_PROGRESS', 'QC', 'TO_DEPLOY', 'NO_ACTION', 'DEPLOYED', 'REOPEN'] as const;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -318,6 +372,45 @@ function StepPreview({
           </Card>
         ))}
       </div>
+
+      {/* Status breakdown */}
+      <Card style={{ padding: '14px 18px' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 10 }}>Status breakdown</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {statusOrder.map(st => {
+            const n = statusBreakdown[st] ?? 0;
+            if (n === 0) return null;
+            return (
+              <div
+                key={st}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 10px', borderRadius: 8, background: 'var(--bg3)',
+                  border: '1px solid var(--border)', fontSize: 12,
+                }}
+              >
+                <Badge status={st} size="sm" />
+                <span style={{ fontWeight: 700, color: 'var(--text)' }}>{n}</span>
+              </div>
+            );
+          })}
+          {Object.entries(statusBreakdown)
+            .filter(([st]) => !statusOrder.includes(st as (typeof statusOrder)[number]))
+            .map(([st, n]) => (
+              <div
+                key={st}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 10px', borderRadius: 8, background: 'var(--bg3)',
+                  border: '1px solid var(--border)', fontSize: 12,
+                }}
+              >
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text2)' }}>{st}</span>
+                <span style={{ fontWeight: 700, color: 'var(--text)' }}>{n}</span>
+              </div>
+            ))}
+        </div>
+      </Card>
 
       {/* Replace warning */}
       {existingCount > 0 && (
@@ -418,7 +511,11 @@ function StepPreview({
           disabled={importing || rows.length === 0}
           icon={importing ? undefined : <Check size={15} />}
         >
-          {importing ? 'Importing…' : `Confirm Import (${rows.length} rows)`}
+          {importing
+            ? 'Importing…'
+            : importType === 'monthly_close'
+              ? `Import ${rows.length} tickets + compute snapshot`
+              : `Import ${rows.length} tickets`}
         </Btn>
       </div>
     </div>
@@ -426,8 +523,9 @@ function StepPreview({
 }
 
 /* ── Success screen ── */
-function SuccessScreen({ count, productName, month, onReset }: {
-  count: number; productName: string; month: string; onReset: () => void;
+function SuccessScreen({ count, productName, month, snapshotWarning, onReset }: {
+  count: number; productName: string; month: string; snapshotWarning?: string;
+  onReset: () => void;
 }) {
   return (
     <Card style={{ textAlign: 'center', padding: '48px 32px' }}>
@@ -444,6 +542,14 @@ function SuccessScreen({ count, productName, month, onReset }: {
       <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 24 }}>
         {count} tickets imported for <strong style={{ color: 'var(--text)' }}>{productName}</strong> — {month}
       </div>
+      {snapshotWarning && (
+        <div style={{
+          textAlign: 'left', marginBottom: 20, padding: '10px 14px', borderRadius: 8,
+          background: 'var(--amber-dim)', border: '1px solid var(--amber)44', fontSize: 13, color: 'var(--amber)',
+        }}>
+          <strong>Snapshot</strong> — {snapshotWarning}
+        </div>
+      )}
       <Btn onClick={onReset}>Import another file</Btn>
     </Card>
   );
@@ -454,7 +560,8 @@ export default function Import() {
   const [step, setStep]               = useState<Step>(1);
   const [products, setProducts]       = useState<Product[]>([]);
   const [productId, setProductId]     = useState('');
-  const [month, setMonth]             = useState('');
+  const [importType, setImportType]   = useState<ImportType>('weekly_refresh');
+  const [month, setMonth]             = useState(() => currentYearMonth());
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
   const [rows, setRows]               = useState<ParsedTicket[]>([]);
@@ -466,6 +573,7 @@ export default function Import() {
   const [done, setDone]               = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const [error, setError]             = useState('');
+  const [snapshotWarning, setSnapshotWarning] = useState('');
 
   const productName = products.find(p => p.id === productId)?.name ?? '';
 
@@ -494,7 +602,20 @@ export default function Import() {
   async function handleFile(file: File) {
     setError('');
     try {
-      const text = await file.text();
+      const lower = file.name.toLowerCase();
+      let text: string;
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        const buf = await file.arrayBuffer();
+        text = workbookBytesToCsv(buf);
+      } else {
+        text = await file.text();
+      }
+
+      if (!text.trim()) {
+        setError('Could not read any data from this file.');
+        return;
+      }
+
       const parsed = parseCSV(text, memberMap);
       if (parsed.length === 0) {
         setError('No valid ticket rows found. Check that the file uses the expected column headers.');
@@ -534,7 +655,7 @@ export default function Import() {
 
       setStep(3);
     } catch (err) {
-      setError('Failed to parse file. Make sure it is a valid UTF-8 CSV.');
+      setError('Failed to parse file. Use a UTF-8 CSV or a valid Excel export.');
       console.error(err);
     }
   }
@@ -542,8 +663,11 @@ export default function Import() {
   async function handleConfirm() {
     setImporting(true);
     setError('');
+    setSnapshotWarning('');
     try {
       const importedMonth = monthToDate(month);
+      const matchedCount = rows.filter(r => r.assignee_matched).length;
+      const unmatchedCount = rows.length - matchedCount;
 
       // Replace strategy: delete existing, then insert
       if (existingCount > 0) {
@@ -575,11 +699,43 @@ export default function Import() {
         imported_month:      importedMonth,
       }));
 
-      // Insert in chunks of 500
       for (const chunk of chunkArray(records, 500)) {
         const { error: err } = await supabase.from('ticket_imports').insert(chunk);
         if (err) throw new Error(err.message);
       }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const importedBy = session?.user?.id ?? null;
+
+      const { error: logErr } = await supabase.from('import_log').insert({
+        product_id:       productId,
+        import_type:      importType,
+        imported_month:   importType === 'monthly_close' ? importedMonth : null,
+        row_count:        rows.length,
+        matched_count:    matchedCount,
+        unmatched_count:  unmatchedCount,
+        imported_by:      importedBy,
+      });
+      if (logErr) console.warn('import_log insert:', logErr.message);
+
+      const { error: prodErr } = await supabase.from('products').update({
+        last_imported_at: new Date().toISOString(),
+        last_import_type: importType,
+      }).eq('id', productId);
+      if (prodErr) console.warn('products staleness update:', prodErr.message);
+
+      let snapWarn = '';
+      if (importType === 'monthly_close') {
+        const { data: snapData, error: fnErr } = await supabase.functions.invoke(
+          'monthly-snapshot-compute',
+          { body: { product_id: productId, month: importedMonth } },
+        );
+        if (fnErr) snapWarn = fnErr.message;
+        else if (snapData && typeof snapData === 'object' && 'ok' in snapData && !(snapData as { ok: boolean }).ok) {
+          snapWarn = (snapData as { error?: string }).error ?? 'Snapshot computation failed.';
+        }
+      }
+      setSnapshotWarning(snapWarn);
 
       setImportedCount(rows.length);
       setDone(true);
@@ -593,7 +749,8 @@ export default function Import() {
   function handleReset() {
     setStep(1);
     setProductId('');
-    setMonth('');
+    setImportType('weekly_refresh');
+    setMonth(currentYearMonth());
     setDateFrom('');
     setDateTo('');
     setRows([]);
@@ -602,14 +759,15 @@ export default function Import() {
     setDone(false);
     setImportedCount(0);
     setError('');
+    setSnapshotWarning('');
   }
 
   return (
     <div style={{ padding: 32, maxWidth: 960, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>CSV Import</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Import tickets</h2>
         <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>
-          Import ticket data from a CSV export. Select a product and month, then upload your file.
+          Choose product and import type, then upload a CSV or Excel export. Preview before confirming.
         </p>
       </div>
 
@@ -632,6 +790,7 @@ export default function Import() {
           count={importedCount}
           productName={productName}
           month={month}
+          snapshotWarning={snapshotWarning || undefined}
           onReset={handleReset}
         />
       ) : step === 1 ? (
@@ -639,6 +798,8 @@ export default function Import() {
           products={products}
           productId={productId}
           setProductId={setProductId}
+          importType={importType}
+          setImportType={setImportType}
           month={month}
           setMonth={setMonth}
           dateFrom={dateFrom}
@@ -661,6 +822,7 @@ export default function Import() {
           month={month}
           existingCount={existingCount}
           importing={importing}
+          importType={importType}
           onConfirm={handleConfirm}
           onBack={() => setStep(2)}
         />

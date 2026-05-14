@@ -1,3 +1,5 @@
+export type ImportType = 'weekly_refresh' | 'monthly_close';
+
 export type Role = 'owner' | 'admin' | 'member';
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'QC' | 'NO_ACTION' | 'DEPLOYED' | 'REOPEN' | 'TO_DEPLOY';
 export type TaskStatus = 'Pending' | 'In Progress' | 'Blocked' | 'QC' | 'Done';
@@ -42,6 +44,8 @@ export interface Product {
   id: string;
   name: string;
   code: string;
+  last_imported_at?: string | null;
+  last_import_type?: ImportType | null;
 }
 
 export interface TicketImport {

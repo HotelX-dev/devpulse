@@ -1,4 +1,5 @@
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import type { TicketStatus } from '../types';
 
 export interface ParsedTicket {
@@ -20,6 +21,14 @@ export interface ParsedTicket {
   target_date: string | null;
 }
 
+/** First sheet of an .xlsx / .xls workbook → CSV text for Papa */
+export function workbookBytesToCsv(buffer: ArrayBuffer): string {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const name = wb.SheetNames[0];
+  if (!name) return '';
+  return XLSX.utils.sheet_to_csv(wb.Sheets[name]);
+}
+
 // Handles: =HYPERLINK("https://...", "HX-4161")  or  just  HX-4161
 function extractTicketRef(raw: string): string {
   if (!raw) return '';
@@ -36,7 +45,7 @@ const STATUS_MAP: Record<string, TicketStatus> = {
   'no action':   'NO_ACTION',
   deployed:      'DEPLOYED',
   reopen:        'REOPEN',
-  reopened:      'REOPEN',   // CSV variant
+  reopened:      'REOPEN',
   to_deploy:     'TO_DEPLOY',
   'to deploy':   'TO_DEPLOY',
   todeploy:      'TO_DEPLOY',
@@ -59,9 +68,38 @@ function parseISODate(val: string | undefined): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** Variants of assignedToName for member_ticket_map lookup (prefix stripping). */
+export function assigneeLookupKeys(raw: string): string[] {
+  const t = raw.trim();
+  if (!t) return [];
+  const keys: string[] = [t];
+
+  // "HotelX RND - Aaron Lee …" → try suffix after RND -
+  const rnd = t.replace(/^[\w\s]*RND\s*-\s*/i, '').trim();
+  if (rnd && rnd !== t) keys.push(rnd);
+
+  // "ProductX - Chia" (single dash segment after product-ish prefix)
+  const simple = t.replace(/^[\w]+\s*-\s*/, '').trim();
+  if (simple && simple !== t && !keys.includes(simple)) keys.push(simple);
+
+  // Deeper strip: keep last " - " segment if it looks like a person name
+  const lastSeg = t.split(/\s+-\s+/).pop()?.trim();
+  if (lastSeg && lastSeg !== t && !keys.includes(lastSeg)) keys.push(lastSeg);
+
+  return [...new Set(keys)];
+}
+
+export function lookupMemberId(raw: string, memberMap: Map<string, string>): string | null {
+  for (const k of assigneeLookupKeys(raw)) {
+    const id = memberMap.get(k);
+    if (id) return id;
+  }
+  return null;
+}
+
 export function parseCSV(
   text: string,
-  memberMap: Map<string, string>,  // raw_name → member_id
+  memberMap: Map<string, string>,
 ): ParsedTicket[] {
   const { data, errors } = Papa.parse<Record<string, string>>(text, {
     header: true,
@@ -76,14 +114,13 @@ export function parseCSV(
   const rows: ParsedTicket[] = [];
 
   for (const row of data) {
-    // Skip non-ticket rows (GraphQL export artifact)
     if (row.__typename && row.__typename !== 'IssueExportRow') continue;
 
     const ticketRef = extractTicketRef(row.issueNo ?? '');
-    if (!ticketRef) continue; // skip blank rows
+    if (!ticketRef) continue;
 
     const rawAssignee = (row.assignedToName ?? '').trim();
-    const primaryMemberId = memberMap.get(rawAssignee) ?? null;
+    const primaryMemberId = lookupMemberId(rawAssignee, memberMap);
 
     rows.push({
       ticket_ref:        ticketRef,
@@ -92,7 +129,7 @@ export function parseCSV(
       description:       (row.description ?? '').trim(),
       is_bug:            parseBool(row.isBug),
       is_enhancement:    parseBool(row.isEnhancement),
-      priority:          parseInt(row.priorityLevel) === 2 ? 2 : 1,
+      priority:          parseInt(row.priorityLevel, 10) === 2 ? 2 : 1,
       status:            normalizeStatus(row.status ?? ''),
       is_deployed:       parseBool(row.isDeployed),
       raw_assignee:      rawAssignee,
