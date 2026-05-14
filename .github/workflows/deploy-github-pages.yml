@@ -1,4 +1,6 @@
 # Builds the Vite app and publishes dist/ to GitHub Pages (project site: /<repo>/).
+# `npm run build` runs `prebuild` → writes public/version.json (commit SHA in CI) so
+# clients can detect a newer deploy and show a refresh banner.
 #
 # Repo settings: Settings → Pages → Build and deployment → Source: GitHub Actions
 #
@@ -40,6 +42,7 @@ jobs:
 
       - name: Build
         env:
+          GITHUB_SHA: ${{ github.sha }}
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}

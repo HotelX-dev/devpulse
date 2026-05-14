@@ -22,6 +22,7 @@ import Team from './pages/manager/Team';
 import MyDashboard from './pages/member/MyDashboard';
 import MyTasks from './pages/member/MyTasks';
 import MemberStandup from './pages/member/Standup';
+import UpdateAvailableBanner from './components/UpdateAvailableBanner';
 
 
 /* ── Providers ── */
@@ -166,6 +167,7 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter basename={basename}>
+          <UpdateAvailableBanner />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<RootRedirect />} />
