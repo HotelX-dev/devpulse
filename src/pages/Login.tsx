@@ -1,14 +1,33 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+
+const REMEMBER_EMAIL_KEY = 'devpulse_login_email';
+
+function readRememberedEmail(): string {
+  try {
+    return localStorage.getItem(REMEMBER_EMAIL_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export default function Login() {
   const { signIn, member } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const stored = readRememberedEmail();
+    if (stored) {
+      setEmail(stored);
+      setRememberMe(true);
+    }
+  }, []);
 
   // Redirect if already signed in
   if (member) {
@@ -27,6 +46,16 @@ export default function Login() {
     setLoading(false);
     if (err) {
       setError(err);
+      return;
+    }
+    try {
+      if (rememberMe) {
+        localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+      } else {
+        localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      }
+    } catch {
+      /* ignore quota / private mode */
     }
     // navigation happens via auth state change in App.tsx
   }
@@ -93,6 +122,8 @@ export default function Login() {
             <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)' }}>Email</label>
             <input
               type="email"
+              name="email"
+              autoComplete="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@ifca.com.my"
@@ -107,6 +138,8 @@ export default function Login() {
             <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)' }}>Password</label>
             <input
               type="password"
+              name="password"
+              autoComplete="current-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -116,6 +149,35 @@ export default function Login() {
               onBlur={e => { e.currentTarget.style.borderColor = 'var(--border2)'; }}
             />
           </div>
+
+          <label
+            htmlFor="remember-me"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              cursor: 'pointer',
+              userSelect: 'none',
+              fontSize: 13,
+              fontWeight: 500,
+              color: 'var(--text)',
+            }}
+          >
+            <input
+              type="checkbox"
+              id="remember-me"
+              checked={rememberMe}
+              onChange={e => setRememberMe(e.target.checked)}
+              style={{
+                width: 18,
+                height: 18,
+                accentColor: 'var(--accent)',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            />
+            Remember me
+          </label>
 
           {error && (
             <div style={{

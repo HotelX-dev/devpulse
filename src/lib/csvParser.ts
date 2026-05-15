@@ -68,9 +68,19 @@ function parseISODate(val: string | undefined): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** Normalize a raw assignee string: strip leading symbols, unify dashes, collapse spaces. */
+function normalizeDash(s: string): string {
+  return s
+    .trim()
+    .replace(/^[^\wÀ-ɏ]+/, '') // strip leading non-letter chars (⚠, emojis, etc.)
+    .replace(/[–—‒―−﹣－]/g, '-') // en/em/minus variants → hyphen
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Variants of assignedToName for member_ticket_map lookup (prefix stripping). */
 export function assigneeLookupKeys(raw: string): string[] {
-  const t = raw.trim();
+  const t = normalizeDash(raw);
   if (!t) return [];
   const keys: string[] = [t];
 
@@ -89,10 +99,25 @@ export function assigneeLookupKeys(raw: string): string[] {
   return [...new Set(keys)];
 }
 
-export function lookupMemberId(raw: string, memberMap: Map<string, string>): string | null {
+/**
+ * Resolves a raw assignee string to a member ID.
+ * First tries member_ticket_map exact lookup, then falls back to matching
+ * extracted name keys directly against member names (case-insensitive).
+ */
+export function lookupMemberId(
+  raw: string,
+  memberMap: Map<string, string>,
+  memberNameMap?: Map<string, string>,
+): string | null {
   for (const k of assigneeLookupKeys(raw)) {
     const id = memberMap.get(k);
     if (id) return id;
+  }
+  if (memberNameMap) {
+    for (const k of assigneeLookupKeys(raw)) {
+      const id = memberNameMap.get(k.toLowerCase());
+      if (id) return id;
+    }
   }
   return null;
 }
@@ -100,6 +125,7 @@ export function lookupMemberId(raw: string, memberMap: Map<string, string>): str
 export function parseCSV(
   text: string,
   memberMap: Map<string, string>,
+  memberNameMap?: Map<string, string>,
 ): ParsedTicket[] {
   const { data, errors } = Papa.parse<Record<string, string>>(text, {
     header: true,
@@ -120,7 +146,7 @@ export function parseCSV(
     if (!ticketRef) continue;
 
     const rawAssignee = (row.assignedToName ?? '').trim();
-    const primaryMemberId = lookupMemberId(rawAssignee, memberMap);
+    const primaryMemberId = lookupMemberId(rawAssignee, memberMap, memberNameMap);
 
     rows.push({
       ticket_ref:        ticketRef,

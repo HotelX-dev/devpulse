@@ -338,6 +338,39 @@ function StepPreview({
   importing: boolean; importType: ImportType;
   onConfirm: () => void; onBack: () => void;
 }) {
+  const [sortKey, setSortKey] = useState<string>('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    switch (sortKey) {
+      case 'Ticket':   return dir * a.ticket_ref.localeCompare(b.ticket_ref);
+      case 'Status':   return dir * a.status.localeCompare(b.status);
+      case 'P':        return dir * (a.priority - b.priority);
+      case 'Type': {
+        const ta = a.is_bug ? 'Bug' : a.is_enhancement ? 'Enh' : '—';
+        const tb = b.is_bug ? 'Bug' : b.is_enhancement ? 'Enh' : '—';
+        return dir * ta.localeCompare(tb);
+      }
+      case 'Assignee': {
+        const na = (a.primary_member_id ? members.get(a.primary_member_id)?.name : a.raw_assignee) ?? '';
+        const nb = (b.primary_member_id ? members.get(b.primary_member_id)?.name : b.raw_assignee) ?? '';
+        return dir * na.localeCompare(nb);
+      }
+      case 'Expected': {
+        const da = a.expected_date ?? '';
+        const db = b.expected_date ?? '';
+        return dir * da.localeCompare(db);
+      }
+      default: return 0;
+    }
+  });
+
   const matched   = rows.filter(r => r.assignee_matched).length;
   const unmatched = rows.length - matched;
   const filtered  = totalParsed - rows.length;
@@ -436,18 +469,35 @@ function StepPreview({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: 'var(--bg3)', position: 'sticky', top: 0, zIndex: 1 }}>
-                {['Ticket', 'Module', 'Status', 'P', 'Type', 'Assignee', 'Expected'].map(h => (
-                  <th key={h} style={{
-                    padding: '9px 12px', textAlign: 'left',
-                    fontWeight: 600, color: 'var(--text2)',
-                    borderBottom: '1px solid var(--border)',
-                    whiteSpace: 'nowrap',
-                  }}>{h}</th>
-                ))}
+                {['Ticket', 'Module', 'Status', 'P', 'Type', 'Assignee', 'Expected'].map(h => {
+                  const sortable = h !== 'Module';
+                  const active = sortKey === h;
+                  return (
+                    <th
+                      key={h}
+                      onClick={sortable ? () => toggleSort(h) : undefined}
+                      style={{
+                        padding: '9px 12px', textAlign: 'left',
+                        fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text2)',
+                        borderBottom: '1px solid var(--border)',
+                        whiteSpace: 'nowrap',
+                        cursor: sortable ? 'pointer' : 'default',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {h}
+                      {sortable && (
+                        <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 10 }}>
+                          {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                        </span>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => {
+              {sortedRows.map((row, i) => {
                 const memberInfo = row.primary_member_id ? members.get(row.primary_member_id) : null;
                 return (
                   <tr key={i} style={{
@@ -572,7 +622,8 @@ export default function Import() {
   const [rows, setRows]               = useState<ParsedTicket[]>([]);
   const [totalParsed, setTotalParsed] = useState(0);
   const [members, setMembers]         = useState<Map<string, MemberInfo>>(new Map());
-  const [memberMap, setMemberMap]     = useState<Map<string, string>>(new Map());
+  const [memberMap, setMemberMap]         = useState<Map<string, string>>(new Map());
+  const [memberNameMap, setMemberNameMap] = useState<Map<string, string>>(new Map());
   const [existingCount, setExisting]  = useState(0);
   const [importing, setImporting]     = useState(false);
   const [done, setDone]               = useState(false);
@@ -601,6 +652,11 @@ export default function Import() {
       const mi = new Map<string, MemberInfo>();
       (memberRows ?? []).forEach(r => mi.set(r.id, { id: r.id, name: r.name, avatar_color: r.avatar_color }));
       setMembers(mi);
+
+      // Build member name map for fallback lookup (name → id, case-insensitive)
+      const mn = new Map<string, string>();
+      (memberRows ?? []).forEach(r => mn.set(r.name.toLowerCase(), r.id));
+      setMemberNameMap(mn);
     }
     load();
   }, []);
@@ -622,7 +678,7 @@ export default function Import() {
         return;
       }
 
-      const parsed = parseCSV(text, memberMap);
+      const parsed = parseCSV(text, memberMap, memberNameMap);
       if (parsed.length === 0) {
         setError('No valid ticket rows found. Check that the file uses the expected column headers.');
         return;

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, X, Trash2, UserCheck, UserX, Link2, Pencil } from 'lucide-react';
+import { Plus, X, Trash2, UserCheck, UserX, Link2, Pencil, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { sortMembers } from '../../lib/utils';
+import { resyncMemberAssignees } from '../../lib/memberSync';
 import Avatar from '../../components/UI/Avatar';
 import type { Member, MemberTicketMap, Role } from '../../types';
 
@@ -476,6 +477,17 @@ export default function Team() {
   const [editTarget, setEditTarget] = useState<Member | null>(null);
   const [toggling, setToggling]   = useState<string | null>(null);
   const [deletingMap, setDeletingMap] = useState<string | null>(null);
+  const [syncing, setSyncing]         = useState(false);
+  const [syncMsg, setSyncMsg]         = useState('');
+
+  async function handleResync() {
+    setSyncing(true);
+    setSyncMsg('');
+    const { scanned, updated } = await resyncMemberAssignees();
+    setSyncing(false);
+    setSyncMsg(`Done — ${updated} of ${scanned} unlinked tickets updated.`);
+    setTimeout(() => setSyncMsg(''), 5000);
+  }
 
   async function fetchAll() {
     setLoading(true);
@@ -633,6 +645,29 @@ export default function Team() {
         </div>
       ) : tab === 'map' ? (
         /* ── Ticket name map table ── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Re-sync toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={handleResync}
+              disabled={syncing}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 8, cursor: syncing ? 'not-allowed' : 'pointer',
+                border: '1px solid var(--border2)', background: 'var(--bg2)',
+                fontSize: 12, fontWeight: 600, color: 'var(--text2)',
+                opacity: syncing ? 0.6 : 1,
+              }}
+            >
+              <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+              {syncing ? 'Syncing…' : 'Re-sync assignments'}
+            </button>
+            {syncMsg && (
+              <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
+                {syncMsg}
+              </span>
+            )}
+          </div>
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{
             background: 'var(--bg2)', border: '1px solid var(--border)',
@@ -690,6 +725,7 @@ export default function Team() {
             from the CSV is resolved to the matching member.
           </div>
         </div>
+        </div>
       ) : (
         /* ── Integrations ── */
         <DiscordSettings isAdmin={isAdmin} />
@@ -705,7 +741,7 @@ export default function Team() {
         <AddMapModal
           members={members}
           onClose={() => setShowMap(false)}
-          onSaved={() => { setShowMap(false); fetchAll(); }}
+          onSaved={() => { setShowMap(false); fetchAll(); handleResync(); }}
         />
       )}
       {editTarget && (

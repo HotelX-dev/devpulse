@@ -16,8 +16,8 @@ SELECT cron.schedule(
   '0 11 * * *',
   $$
   SELECT net.http_post(
-    url     := 'YOUR_PROJECT_URL/functions/v1/daily-standup-check',
-    headers := '{"Authorization":"Bearer YOUR_SERVICE_KEY","Content-Type":"application/json"}'::jsonb,
+    url     := 'https://qbsokprpcwahdwifkaog.supabase.co/functions/v1/daily-standup-check',
+    headers := '{"Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFic29rcHJwY3dhaGR3aWZrYW9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NDQxODYsImV4cCI6MjA5NDMyMDE4Nn0.i2KXTo7vTscMamaOcDcF_mnz7wBgGKC4mAJhiuH_v88","Content-Type":"application/json"}'::jsonb,
     body    := '{}'::jsonb
   );
   $$
@@ -30,8 +30,8 @@ SELECT cron.schedule(
   '5 0 1 * *',
   $$
   SELECT net.http_post(
-    url     := 'YOUR_PROJECT_URL/functions/v1/monthly-snapshot-compute',
-    headers := '{"Authorization":"Bearer YOUR_SERVICE_KEY","Content-Type":"application/json"}'::jsonb,
+    url     := 'https://qbsokprpcwahdwifkaog.supabase.co/functions/v1/monthly-snapshot-compute',
+    headers := '{"Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFic29rcHJwY3dhaGR3aWZrYW9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NDQxODYsImV4cCI6MjA5NDMyMDE4Nn0.i2KXTo7vTscMamaOcDcF_mnz7wBgGKC4mAJhiuH_v88","Content-Type":"application/json"}'::jsonb,
     body    := '{}'::jsonb
   );
   $$
