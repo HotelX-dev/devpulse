@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, X, Edit2, ChevronDown } from 'lucide-react';
+import { Plus, X, Edit2, ChevronDown, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -378,13 +378,14 @@ const labelStyle: React.CSSProperties = {
 
 /* ── Task row card ── */
 function TaskCard({
-  task, memberMap, productMap, onEdit, onStatusChange, readOnly,
+  task, memberMap, productMap, onEdit, onStatusChange, onDelete, readOnly,
 }: {
   task: Task;
   memberMap: Map<string, Member>;
   productMap: Map<string, string>;
   onEdit: () => void;
   onStatusChange: (s: TaskStatus) => void;
+  onDelete?: () => void;
   readOnly?: boolean;
 }) {
   const isMobile = useIsMobile();
@@ -507,6 +508,16 @@ function TaskCard({
               <Edit2 size={14} />
             </button>
           )}
+          {onDelete && (
+            <button type="button" onClick={onDelete} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--red)', display: 'flex', padding: 8, borderRadius: 5, flexShrink: 0,
+              minWidth: 40, minHeight: 40, alignItems: 'center', justifyContent: 'center',
+              opacity: 0.6,
+            }}>
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -534,6 +545,7 @@ function Pill({ label, active, onClick }: { label: string; active: boolean; onCl
 export default function Tasks() {
   const { member } = useAuth();
   const isAdmin = member?.role === 'admin';
+  const isOwner = member?.role === 'owner';
   const isMobile = useIsMobile();
   const pageStyle = usePageShellStyle({ maxWidth: 960, gap: 20 });
 
@@ -547,6 +559,7 @@ export default function Tasks() {
   const [search, setSearch]               = useState('');
 
   const [modal, setModal] = useState<{ open: boolean; task: Partial<Task> | null }>({ open: false, task: null });
+  const [confirmDelete, setConfirmDelete] = useState<Task | null>(null);
 
   const memberMap  = new Map(members.map(m => [m.id, m]));
   const productMap = new Map(products.map(p => [p.id, p.name]));
@@ -627,6 +640,12 @@ export default function Tasks() {
       ? { ...t, status, closed_at: closedAt, actual_days: actualDays }
       : t,
     ));
+  }
+
+  async function handleDelete(taskId: string) {
+    await supabase.from('tasks').delete().eq('id', taskId);
+    setTasks(ts => ts.filter(t => t.id !== taskId));
+    setConfirmDelete(null);
   }
 
   /* Filtering */
@@ -747,6 +766,7 @@ export default function Tasks() {
               productMap={productMap}
               onEdit={() => setModal({ open: true, task })}
               onStatusChange={s => handleStatusChange(task.id, s)}
+              onDelete={isOwner ? () => setConfirmDelete(task) : undefined}
               readOnly={isAdmin}
             />
           ))}
@@ -763,6 +783,54 @@ export default function Tasks() {
           onSave={handleSave}
           onClose={() => setModal({ open: false, task: null })}
         />
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--bg2)', border: '1px solid var(--border)',
+              borderRadius: 14, padding: 28, width: '100%', maxWidth: 420,
+              display: 'flex', flexDirection: 'column', gap: 16,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Delete task?</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.5 }}>
+              <strong style={{ color: 'var(--text)' }}>{confirmDelete.title}</strong> will be permanently deleted. This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                style={{
+                  padding: '9px 20px', borderRadius: 8, border: '1px solid var(--border2)',
+                  background: 'transparent', color: 'var(--text2)', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(confirmDelete.id)}
+                style={{
+                  padding: '9px 20px', borderRadius: 8, border: 'none',
+                  background: 'var(--red)', color: '#fff', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

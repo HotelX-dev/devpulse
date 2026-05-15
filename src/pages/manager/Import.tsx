@@ -137,7 +137,7 @@ function StepSetup({
 
   return (
     <Card>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div>
           <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)', display: 'block', marginBottom: 8 }}>
             Product

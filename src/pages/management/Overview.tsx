@@ -42,14 +42,6 @@ function greeting(): string {
   return 'Good evening';
 }
 
-function fmtRelDate(iso: string | null | undefined): string {
-  if (!iso) return 'Never';
-  const days = daysSince(iso);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  return formatDate(iso);
-}
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -207,13 +199,21 @@ function StatusBadge({ label, color }: { label: string; color: string }) {
   );
 }
 
+const ROLE_COLOR: Record<string, string> = {
+  owner:  'var(--accent)',
+  admin:  'var(--purple)',
+  member: 'var(--blue)',
+};
+
 function MemberCard({
   member,
   ticketCount,
+  maxTickets,
   lastStandup,
 }: {
   member: Member;
   ticketCount: number;
+  maxTickets: number;
   lastStandup: string | undefined;
 }) {
   const standupDays = lastStandup ? daysSince(lastStandup) : 999;
@@ -222,50 +222,91 @@ function MemberCard({
     : standupDays <= 2
     ? 'var(--amber)'
     : 'var(--red)';
+  const standupLabel = standupDays === 0
+    ? 'Today'
+    : standupDays === 1
+    ? 'Yesterday'
+    : standupDays < 7
+    ? `${standupDays}d ago`
+    : 'No recent';
+
+  const barPct = maxTickets > 0 ? Math.round((ticketCount / maxTickets) * 100) : 0;
+  const barColor = ticketCount === 0
+    ? 'var(--border2)'
+    : ticketCount >= maxTickets * 0.75
+    ? 'var(--red)'
+    : ticketCount >= maxTickets * 0.4
+    ? 'var(--amber)'
+    : 'var(--green)';
 
   return (
     <div style={{
       background: 'var(--bg2)', border: '1px solid var(--border)',
-      borderRadius: 12, padding: '14px 16px', minWidth: 180, flexShrink: 0,
+      borderRadius: 12, padding: '14px 16px',
+      display: 'flex', flexDirection: 'column', gap: 10,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <Avatar name={member.name} color={member.avatar_color} size="md" />
-        <div style={{ minWidth: 0 }}>
+      {/* Top row: avatar + name + standup dot */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <Avatar name={member.name} color={member.avatar_color} size="md" />
+          <div style={{
+            position: 'absolute', bottom: 0, right: 0,
+            width: 9, height: 9, borderRadius: '50%',
+            background: standupColor,
+            border: '2px solid var(--bg2)',
+          }} title={`Standup: ${standupLabel}`} />
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
             fontSize: 13, fontWeight: 700, color: 'var(--text)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {member.name.split(' ')[0]}
+            {member.name}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text2)', textTransform: 'capitalize', marginTop: 1 }}>
+          <span style={{
+            display: 'inline-block', marginTop: 3,
+            fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 99,
+            background: `${ROLE_COLOR[member.role] ?? 'var(--text3)'}1a`,
+            color: ROLE_COLOR[member.role] ?? 'var(--text3)',
+            textTransform: 'capitalize',
+          }}>
             {member.role}
-          </div>
+          </span>
         </div>
       </div>
 
-      <div style={{
-        borderTop: '1px solid var(--border)', paddingTop: 10,
-        display: 'flex', flexDirection: 'column', gap: 6,
-      }}>
+      {/* Workload bar */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Tickets</span>
+          <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tickets</span>
           <span style={{
-            fontSize: 12, fontWeight: 700,
+            fontSize: 11, fontWeight: 700,
             color: ticketCount > 0 ? 'var(--text)' : 'var(--text3)',
           }}>
             {ticketCount}
           </span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Standup</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: standupColor }}>
-            {fmtRelDate(lastStandup)}
-          </span>
+        <div style={{ height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 99,
+            width: `${barPct}%`,
+            background: barColor,
+            transition: 'width 0.4s ease',
+          }} />
         </div>
+      </div>
+
+      {/* Standup row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: standupColor, flexShrink: 0 }} />
+        <span style={{ fontSize: 11, color: standupColor, fontWeight: 600 }}>{standupLabel}</span>
+        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>standup</span>
       </div>
     </div>
   );
 }
+
+type SortKey = 'ticket_ref' | 'assignee' | 'status' | 'type' | 'priority' | 'expected';
 
 function TicketDetailPanel({
   product,
@@ -280,6 +321,49 @@ function TicketDetailPanel({
   memberMap: Map<string, Member>;
   onClose: () => void;
 }) {
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  function resolveAssignee(t: TicketImport): string {
+    const raw = (!t.raw_assignee || t.raw_assignee === 'null') ? null : t.raw_assignee;
+    return t.primary_member_id
+      ? (memberMap.get(t.primary_member_id)?.name ?? raw ?? '')
+      : raw ?? '';
+  }
+
+  const sorted = [...tickets].sort((a, b) => {
+    if (!sortKey) return 0;
+    const dir = sortDir === 'asc' ? 1 : -1;
+    switch (sortKey) {
+      case 'ticket_ref': return dir * (a.ticket_ref ?? '').localeCompare(b.ticket_ref ?? '');
+      case 'assignee':   return dir * resolveAssignee(a).localeCompare(resolveAssignee(b));
+      case 'status':     return dir * (a.status ?? '').localeCompare(b.status ?? '');
+      case 'type': {
+        const ta = a.is_bug ? 'Bug' : a.is_enhancement ? 'Enhancement' : '—';
+        const tb = b.is_bug ? 'Bug' : b.is_enhancement ? 'Enhancement' : '—';
+        return dir * ta.localeCompare(tb);
+      }
+      case 'priority':   return dir * ((a.priority ?? 2) - (b.priority ?? 2));
+      case 'expected':   return dir * ((a.expected_date ?? '').localeCompare(b.expected_date ?? ''));
+      default: return 0;
+    }
+  });
+
+  const HEADERS: { label: string; key: SortKey | null }[] = [
+    { label: 'Ticket Ref',  key: 'ticket_ref' },
+    { label: 'Description', key: null },
+    { label: 'Assignee',    key: 'assignee' },
+    { label: 'Status',      key: 'status' },
+    { label: 'Type',        key: 'type' },
+    { label: 'Priority',    key: 'priority' },
+    { label: 'Expected',    key: 'expected' },
+  ];
+
   return (
     <div style={{
       background: 'var(--bg2)', border: '1px solid var(--border)',
@@ -331,22 +415,38 @@ function TicketDetailPanel({
             fontSize: 12, color: 'var(--text)',
           }}>
             <thead>
-              <tr style={{ background: 'var(--bg3, var(--bg2))' }}>
-                {['Ticket Ref', 'Description', 'Assignee', 'Status', 'Type', 'Priority', 'Expected'].map(h => (
-                  <th key={h} style={{
-                    padding: '8px 14px', textAlign: 'left', fontWeight: 600,
-                    fontSize: 11, color: 'var(--text2)', whiteSpace: 'nowrap',
-                    borderBottom: '1px solid var(--border)',
-                    position: 'sticky', top: 0,
-                    background: 'var(--bg2)',
-                  }}>
-                    {h}
-                  </th>
-                ))}
+              <tr>
+                {HEADERS.map(({ label, key }) => {
+                  const active = sortKey === key;
+                  const sortable = key !== null;
+                  return (
+                    <th
+                      key={label}
+                      onClick={sortable ? () => handleSort(key!) : undefined}
+                      style={{
+                        padding: '8px 14px', textAlign: 'left', fontWeight: 600,
+                        fontSize: 11, whiteSpace: 'nowrap',
+                        borderBottom: '1px solid var(--border)',
+                        position: 'sticky', top: 0,
+                        background: 'var(--bg2)',
+                        color: active ? 'var(--accent)' : 'var(--text2)',
+                        cursor: sortable ? 'pointer' : 'default',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {label}
+                      {sortable && (
+                        <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 9 }}>
+                          {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                        </span>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {tickets.map((t, i) => {
+              {sorted.map((t, i) => {
                 const rawDisplay = (!t.raw_assignee || t.raw_assignee === 'null') ? null : t.raw_assignee;
                 const assignee = t.primary_member_id
                   ? (memberMap.get(t.primary_member_id)?.name ?? rawDisplay ?? '—')
@@ -604,6 +704,12 @@ export default function Overview() {
       {/* KPI strip */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <KpiPill
+          icon={<Users size={18} />}
+          label="Active members"
+          value={members.length}
+          color="var(--accent)"
+        />
+        <KpiPill
           icon={<Activity size={18} />}
           label={`Active tickets · ${fmtMonth(selectedMonth)}`}
           value={totals.active}
@@ -615,31 +721,30 @@ export default function Overview() {
           value={totals.deployed}
           color="var(--green)"
         />
-        <KpiPill
-          icon={<Users size={18} />}
-          label="Active members"
-          value={members.length}
-          color="var(--accent)"
-        />
       </div>
 
       {/* Active Members */}
-      <Section title="Active Members">
-        <div style={{
-          display: 'flex', gap: 10, overflowX: 'auto',
-          paddingBottom: 4,
-          // hide scrollbar on webkit
-          scrollbarWidth: 'thin',
-        }}>
-          {members.map(m => (
-            <MemberCard
-              key={m.id}
-              member={m}
-              ticketCount={memberTicketCounts.get(m.id) ?? 0}
-              lastStandup={memberLastStandup.get(m.id)}
-            />
-          ))}
-        </div>
+      <Section title={`Active Members · ${members.length}`}>
+        {(() => {
+          const maxTickets = Math.max(1, ...members.map(m => memberTicketCounts.get(m.id) ?? 0));
+          return (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+              gap: 10,
+            }}>
+              {members.map(m => (
+                <MemberCard
+                  key={m.id}
+                  member={m}
+                  ticketCount={memberTicketCounts.get(m.id) ?? 0}
+                  maxTickets={maxTickets}
+                  lastStandup={memberLastStandup.get(m.id)}
+                />
+              ))}
+            </div>
+          );
+        })()}
       </Section>
 
       {/* Product snapshot + inline detail panel */}

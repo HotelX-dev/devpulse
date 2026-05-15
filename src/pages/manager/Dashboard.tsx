@@ -12,7 +12,8 @@ import ProductTabs from '../../components/UI/ProductTabs';
 import PipelineFlow from '../../components/Charts/PipelineFlow';
 import BarChart, { type BarChartMonth } from '../../components/Charts/BarChart';
 import HeatmapGrid, { type HeatmapEntry } from '../../components/Charts/HeatmapGrid';
-import type { Product, Member } from '../../types';
+import ForecastChart from '../../components/Charts/ForecastChart';
+import type { Product, Member, ForecastPoint } from '../../types';
 
 /* ── helpers ── */
 
@@ -111,6 +112,7 @@ export default function ManagerDashboard() {
   const [members, setMembers]             = useState<Member[]>([]);
   const [standups, setStandups]           = useState<HeatmapEntry[]>([]);
   const [memberMap, setMemberMap]         = useState<Map<string, string>>(new Map());
+  const [forecastData, setForecastData]   = useState<ForecastPoint[]>([]);
   const [loading, setLoading]             = useState(true);
 
   const { alerts } = useAlerts();
@@ -194,8 +196,17 @@ export default function ManagerDashboard() {
         .select('member_id, date')
         .gte('date', startDate)
         .lte('date', endDate),
-    ]).then(([{ data: tix }, { data: allTix }, { data: slog }]) => {
+
+      // Monthly snapshot for forecast
+      supabase
+        .from('monthly_snapshot')
+        .select('forecast_json')
+        .eq('product_id', selectedProduct)
+        .eq('month', monthDate)
+        .maybeSingle(),
+    ]).then(([{ data: tix }, { data: allTix }, { data: slog }, { data: snap }]) => {
       setTickets(tix ?? []);
+      setForecastData((snap?.forecast_json as ForecastPoint[] | null) ?? []);
 
       // Aggregate chart data by month
       const monthMap = new Map<string, { active: number; deployed: number }>();
@@ -476,6 +487,16 @@ export default function ManagerDashboard() {
           <Section title="Monthly delivery trend">
             <Card>
               <BarChart data={chartData} />
+            </Card>
+          </Section>
+
+          {/* ── Backlog Forecast ── */}
+          <Section title={`Backlog forecast · from ${fmtMonth(selectedMonth)}`}>
+            <Card>
+              <ForecastChart
+                data={forecastData}
+                currentActive={kpi.open + kpi.in_progress + kpi.qc + kpi.to_deploy + kpi.reopen}
+              />
             </Card>
           </Section>
 
