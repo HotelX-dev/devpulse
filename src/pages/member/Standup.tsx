@@ -8,6 +8,12 @@ import type { Product } from '../../types';
 /* ── constants ── */
 const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT'];
 const TASK_TYPES = ['Ticket', 'Adhoc', 'Migration', 'Bug fix', 'Performance', 'Other'] as const;
+
+const PREFIX_TO_CODE: Record<string, string> = {
+  HX: 'HOTEL',
+  MX: 'MENU',
+  EX: 'EVENT',
+};
 type TType = typeof TASK_TYPES[number];
 
 /* ── task entry shape ── */
@@ -43,6 +49,13 @@ function localToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function productIdFromRef(ticketRef: string, products: Product[]): string | null {
+  const prefix = ticketRef.split('-')[0];
+  const code = PREFIX_TO_CODE[prefix];
+  if (!code) return null;
+  return products.find(p => p.code === code)?.id ?? null;
+}
+
 /* ── styles ── */
 const inputStyle: React.CSSProperties = {
   padding: '8px 10px', borderRadius: 7,
@@ -57,10 +70,10 @@ interface TaskRowProps {
   onChange: (patch: Partial<TaskEntry>) => void;
   onRemove: () => void;
   canRemove: boolean;
-  productId: string;
+  products: Product[];
 }
 
-function TaskRow({ task, onChange, onRemove, canRemove, productId }: TaskRowProps) {
+function TaskRow({ task, onChange, onRemove, canRemove, products }: TaskRowProps) {
   const [hint, setHint] = useState('');
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -72,11 +85,12 @@ function TaskRow({ task, onChange, onRemove, canRemove, productId }: TaskRowProp
     if (debounce.current) clearTimeout(debounce.current);
     if (upper.match(/^[A-Z]{2,5}-\d+$/)) {
       debounce.current = setTimeout(async () => {
+        const inferredProductId = productIdFromRef(upper, products);
         const query = supabase
           .from('ticket_imports')
           .select('description, module_name, status')
           .eq('ticket_ref', upper);
-        if (productId) query.eq('product_id', productId);
+        if (inferredProductId) query.eq('product_id', inferredProductId);
         const { data } = await query.order('imported_at', { ascending: false }).limit(1).maybeSingle();
         if (data) {
           const label = data.description || data.module_name || '';
@@ -162,12 +176,12 @@ function TaskRow({ task, onChange, onRemove, canRemove, productId }: TaskRowProp
 
 /* ── TaskList ── */
 function TaskList({
-  label, tasks, onChange, productId, required,
+  label, tasks, onChange, products, required,
 }: {
   label: string;
   tasks: TaskEntry[];
   onChange: (tasks: TaskEntry[]) => void;
-  productId: string;
+  products: Product[];
   required?: boolean;
 }) {
   function update(i: number, patch: Partial<TaskEntry>) {
@@ -198,7 +212,7 @@ function TaskList({
             onChange={patch => update(i, patch)}
             onRemove={() => remove(i)}
             canRemove={tasks.length > 1}
-            productId={productId}
+            products={products}
           />
         ))}
         <button
@@ -271,7 +285,6 @@ export default function MemberStandup() {
   const [editing, setEditing]   = useState(false);
   const [loading, setLoading]   = useState(true);
 
-  const [productId, setProductId]       = useState('');
   const [yesterdayTasks, setYesterday]  = useState<TaskEntry[]>([emptyTask()]);
   const [todayTasks, setToday]          = useState<TaskEntry[]>([emptyTask()]);
   const [blockers, setBlockers]         = useState('');
@@ -281,7 +294,6 @@ export default function MemberStandup() {
   const [error, setError]   = useState('');
 
   function fillForm(log: LogEntry) {
-    setProductId(log.product_id ?? '');
     setYesterday(parseTasks(log.yesterday));
     setToday(parseTasks(log.today));
     setBlockers(log.blockers ?? '');
@@ -305,8 +317,6 @@ export default function MemberStandup() {
       if (todayLog) {
         setExisting(todayLog);
         fillForm(todayLog);
-      } else if (sorted.length > 0) {
-        setProductId(sorted[0].id);
       }
 
       setHistory((hist ?? []).filter(h => h.date !== today).slice(0, 7));
@@ -328,12 +338,15 @@ export default function MemberStandup() {
       .filter(Boolean);
     const primaryRef = allRefs[0] || null;
 
+    // Infer primary product from first recognized ticket prefix
+    const derivedProductId = allRefs.map(ref => productIdFromRef(ref, products)).find(id => id !== null) ?? null;
+
     // Primary task type (first today task)
     const primaryType = todayTasks[0]?.type ?? 'Other';
 
     const { error: err } = await supabase.from('standup_logs').upsert({
       member_id:  member.id,
-      product_id: productId || null,
+      product_id: derivedProductId,
       date:       today,
       task_type:  primaryType,
       yesterday:  serializeTasks(yesterdayTasks),
@@ -346,7 +359,7 @@ export default function MemberStandup() {
     if (err) { setError(err.message); return; }
 
     // Fire-and-forget Discord notification (non-blocking)
-    const productCode = products.find(p => p.id === productId)?.code ?? null;
+    const productCode = products.find(p => p.id === derivedProductId)?.code ?? null;
     supabase.functions.invoke('notify-discord', {
       body: {
         member_name: member.name,
@@ -361,7 +374,7 @@ export default function MemberStandup() {
 
     const updated: LogEntry = {
       id: existing?.id ?? '',
-      product_id: productId || null,
+      product_id: derivedProductId,
       date: today,
       yesterday: serializeTasks(yesterdayTasks),
       today: todaySerialized,
@@ -454,28 +467,18 @@ export default function MemberStandup() {
           background: 'var(--bg2)', border: '1px solid var(--border)',
           borderRadius: 12, padding: 24, display: 'flex', flexDirection: 'column', gap: 20,
         }}>
-          {/* Product */}
-          <div style={{ maxWidth: 220 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text2)', marginBottom: 6 }}>Product</div>
-            <select value={productId} onChange={e => setProductId(e.target.value)}
-              style={{ ...inputStyle, width: '100%', cursor: 'pointer', colorScheme: 'dark' }}>
-              <option value="">— None —</option>
-              {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-
           <TaskList
             label="What did you do yesterday?"
             tasks={yesterdayTasks}
             onChange={setYesterday}
-            productId={productId}
+            products={products}
           />
 
           <TaskList
             label="What will you do today?"
             tasks={todayTasks}
             onChange={setToday}
-            productId={productId}
+            products={products}
             required
           />
 

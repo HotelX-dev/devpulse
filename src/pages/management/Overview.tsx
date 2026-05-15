@@ -93,6 +93,7 @@ interface ProductStats {
   to_deploy: number;
   deployed: number;
   reopen: number;
+  no_action: number;
   total: number;
 }
 
@@ -573,17 +574,18 @@ export default function Overview() {
           if (!stats.has(row.product_id)) {
             stats.set(row.product_id, {
               open: 0, in_progress: 0, qc: 0, to_deploy: 0,
-              deployed: 0, reopen: 0, total: 0,
+              deployed: 0, reopen: 0, no_action: 0, total: 0,
             });
           }
           const s = stats.get(row.product_id)!;
           s.total++;
-          if (row.status === 'OPEN')           s.open++;
+          if (row.status === 'OPEN')             s.open++;
           else if (row.status === 'IN_PROGRESS') s.in_progress++;
           else if (row.status === 'QC')          s.qc++;
           else if (row.status === 'TO_DEPLOY')   s.to_deploy++;
           else if (row.status === 'DEPLOYED')    s.deployed++;
           else if (row.status === 'REOPEN')      s.reopen++;
+          else if (row.status === 'NO_ACTION')   s.no_action++;
 
           if (row.primary_member_id) {
             memberCounts.set(
@@ -812,7 +814,10 @@ export default function Overview() {
                         <StatusRow label="To Deploy"   value={s.to_deploy}   color="var(--amber)"  total={s.total} />
                         <StatusRow label="Deployed"    value={s.deployed}    color="var(--green)"  total={s.total} />
                         {s.reopen > 0 && (
-                          <StatusRow label="Reopen" value={s.reopen} color="var(--red)" total={s.total} />
+                          <StatusRow label="Reopen"    value={s.reopen}    color="var(--red)"    total={s.total} />
+                        )}
+                        {s.no_action > 0 && (
+                          <StatusRow label="No Action" value={s.no_action} color="var(--text3)"  total={s.total} />
                         )}
                         <div style={{
                           marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)',
