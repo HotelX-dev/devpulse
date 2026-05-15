@@ -16,10 +16,13 @@ const SEVERITY_STYLES = {
 } as const;
 
 const TYPE_LABELS: Record<string, string> = {
-  MISSING_STANDUP:  'Missing Standup',
-  STALE_TICKET:     'Stale Ticket',
-  ADHOC_OVERLOAD:   'Adhoc Overload',
-  BACKLOG_GROWING:  'Backlog Growing',
+  MISSING_STANDUP:      'Missing Standup',
+  STALE_TICKET:         'Stale Ticket',
+  ADHOC_OVERLOAD:       'Adhoc Overload',
+  BACKLOG_GROWING:      'Backlog Growing',
+  STALE_BLOCKER:        'Stale Blocker',
+  TICKET_AGED_CRITICAL: 'Aged Critical Ticket',
+  DELIVERY_AT_RISK:     'Delivery at Risk',
 };
 
 export default function AlertBanner({ alert, memberName, onResolve, touchFriendly }: AlertBannerProps) {

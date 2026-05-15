@@ -7,6 +7,7 @@ export function useAlerts() {
   const { member } = useAuth();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [latestNewAlert, setLatestNewAlert] = useState<Alert | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchAlerts = useCallback(async () => {
@@ -33,8 +34,11 @@ export function useAlerts() {
     const channelName = `alerts-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
       .channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, (payload) => {
         fetchAlerts();
+        if (payload.eventType === 'INSERT' && payload.new) {
+          setLatestNewAlert(payload.new as Alert);
+        }
       })
       .subscribe();
 
@@ -46,5 +50,5 @@ export function useAlerts() {
     };
   }, [fetchAlerts]);
 
-  return { alerts, loading };
+  return { alerts, loading, latestNewAlert };
 }
