@@ -345,6 +345,20 @@ export default function MemberStandup() {
     setSaving(false);
     if (err) { setError(err.message); return; }
 
+    // Fire-and-forget Discord notification (non-blocking)
+    const productCode = products.find(p => p.id === productId)?.code ?? null;
+    supabase.functions.invoke('notify-discord', {
+      body: {
+        member_name: member.name,
+        product_code: productCode,
+        date:         today,
+        task_type:    primaryType,
+        today:        todaySerialized,
+        yesterday:    serializeTasks(yesterdayTasks),
+        blockers:     blockers.trim() || null,
+      },
+    }).catch(() => {/* ignore notification errors */});
+
     const updated: LogEntry = {
       id: existing?.id ?? '',
       product_id: productId || null,

@@ -225,7 +225,12 @@ export default function MyDashboard() {
       supabase.from('leave_log').select('id').eq('member_id', mid)
         .lte('start_date', today).gte('end_date', today).maybeSingle(),
 
-      /* active tickets — primary or secondary assignee */
+      /* active tickets count — primary or secondary assignee */
+      supabase.from('ticket_imports').select('id', { count: 'exact', head: true })
+        .or(`primary_member_id.eq.${mid},secondary_assignees.cs.{${mid}}`)
+        .not('status', 'in', '("DEPLOYED","NO_ACTION")'),
+
+      /* active tickets preview list (primary only, capped at 5) */
       supabase.from('ticket_imports').select('ticket_ref, description, status, customer_name')
         .eq('primary_member_id', mid)
         .not('status', 'in', '("DEPLOYED","NO_ACTION")')
@@ -259,6 +264,7 @@ export default function MyDashboard() {
     ]).then(([
       { data: todayLog },
       { data: leaveRow },
+      { count: tkCount },
       { data: tkts },
       { data: tsks },
       { data: hours },
@@ -270,7 +276,7 @@ export default function MyDashboard() {
 
       const tkList = (tkts ?? []) as typeof tickets;
       setTickets(tkList);
-      setActiveTickets(tkList.length);
+      setActiveTickets(tkCount ?? 0);
 
       const tsList = (tsks ?? []) as typeof tasks;
       setTasks(tsList);

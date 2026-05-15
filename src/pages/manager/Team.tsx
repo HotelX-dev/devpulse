@@ -358,8 +358,110 @@ function AddMapModal({ members, onClose, onSaved }: AddMapModalProps) {
   );
 }
 
+/* ── DiscordSettings ── */
+function DiscordSettings({ isAdmin }: { isAdmin: boolean }) {
+  const [webhook, setWebhook] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+  const [err,     setErr]     = useState('');
+
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'discord_standup_webhook').single()
+      .then(({ data }) => { setWebhook(data?.value ?? ''); setLoading(false); });
+  }, []);
+
+  async function handleSave() {
+    if (webhook && !webhook.startsWith('https://discord.com/api/webhooks/')) {
+      setErr('URL must start with https://discord.com/api/webhooks/'); return;
+    }
+    setSaving(true); setErr('');
+    const { error } = await supabase.from('app_settings')
+      .upsert({ key: 'discord_standup_webhook', value: webhook.trim(), updated_at: new Date().toISOString() });
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  if (loading) return <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
+
+  return (
+    <div style={{ display: 'grid', gap: 20 }}>
+      <div style={{
+        background: 'var(--bg2)', border: '1px solid var(--border)',
+        borderRadius: 12, padding: 24,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <span style={{ fontSize: 20 }}>🔔</span>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Discord Standup Notifications</div>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
+          Paste a Discord channel webhook URL below. When any team member submits their standup,
+          a formatted message will be posted to that channel automatically.
+        </div>
+
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>Webhook URL</label>
+            <input
+              style={{ ...inp, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+              value={webhook}
+              onChange={e => setWebhook(e.target.value)}
+              placeholder="https://discord.com/api/webhooks/..."
+              disabled={isAdmin}
+            />
+            {isAdmin && (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                Only owners can change integration settings.
+              </div>
+            )}
+          </div>
+
+          {err && <div style={{ fontSize: 12, color: 'var(--red)' }}>{err}</div>}
+
+          {!isAdmin && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={{
+                  padding: '8px 18px', borderRadius: 8, border: 'none',
+                  background: 'var(--accent)', color: '#fff', fontSize: 13,
+                  fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              {saved && <span style={{ fontSize: 12, color: 'var(--green)' }}>Saved!</span>}
+              {webhook && (
+                <button
+                  onClick={() => { setWebhook(''); }}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border2)',
+                    background: 'transparent', color: 'var(--text2)', fontSize: 13,
+                    fontWeight: 500, cursor: 'pointer',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 20, padding: '12px 14px', background: 'var(--bg3)', borderRadius: 8, fontSize: 12, color: 'var(--text2)', lineHeight: 1.7 }}>
+          <strong style={{ color: 'var(--text)' }}>How to get a webhook URL:</strong><br />
+          In Discord → channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main ── */
-type Tab = 'members' | 'map';
+type Tab = 'members' | 'map' | 'integrations';
 
 export default function Team() {
   const { member: me } = useAuth();
@@ -426,7 +528,7 @@ export default function Team() {
             {activeCount} active · {inactiveCount} inactive · {maps.length} ticket name mappings
           </div>
         </div>
-        {!isAdmin && (
+        {!isAdmin && tab !== 'integrations' && (
           <button
             onClick={() => tab === 'members' ? setShowAdd(true) : setShowMap(true)}
             style={{
@@ -444,7 +546,7 @@ export default function Team() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border2)' }}>
-        {(['members', 'map'] as Tab[]).map(t => (
+        {(['members', 'map', 'integrations'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 16px', background: 'none', border: 'none',
             fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -452,7 +554,7 @@ export default function Team() {
             borderBottom: `2px solid ${tab === t ? 'var(--accent)' : 'transparent'}`,
             marginBottom: -1,
           }}>
-            {t === 'members' ? 'Members' : 'Ticket Name Map'}
+            {t === 'members' ? 'Members' : t === 'map' ? 'Ticket Name Map' : 'Integrations'}
           </button>
         ))}
       </div>
@@ -529,7 +631,7 @@ export default function Team() {
             </div>
           )}
         </div>
-      ) : (
+      ) : tab === 'map' ? (
         /* ── Ticket name map table ── */
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{
@@ -588,6 +690,9 @@ export default function Team() {
             from the CSV is resolved to the matching member.
           </div>
         </div>
+      ) : (
+        /* ── Integrations ── */
+        <DiscordSettings isAdmin={isAdmin} />
       )}
 
       {showAdd && (
