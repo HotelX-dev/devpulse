@@ -12,12 +12,14 @@
 # If the repo is <user>.github.io (site at https://<user>.github.io/), set:
 #   VITE_BASE_PATH: /
 
-name: Deploy GitHub Pages
+name: Deploy GitHub Pages (disabled)
 
 on:
-  push:
-    branches: [main, master]
   workflow_dispatch:
+    inputs:
+      disabled:
+        description: 'This workflow is disabled — using Firebase instead'
+        required: false
 
 permissions:
   contents: write
