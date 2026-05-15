@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import { ThemeContext, useThemeState } from './hooks/useTheme';
@@ -23,6 +23,8 @@ import MyDashboard from './pages/member/MyDashboard';
 import MyTasks from './pages/member/MyTasks';
 import MemberStandup from './pages/member/Standup';
 import UpdateAvailableBanner from './components/UpdateAvailableBanner';
+import Overview from './pages/management/Overview';
+import { ToastProvider, useToast } from './context/ToastContext';
 
 
 /* ── Providers ── */
@@ -79,8 +81,14 @@ function AppShell({ children }: { children: ReactNode }) {
   const title = PAGE_TITLES[location.pathname] ?? 'DevPulse';
   const isMobile = useIsMobile();
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const { alerts, loading: alertsLoading } = useAlerts();
+  const { alerts, loading: alertsLoading, latestNewAlert } = useAlerts();
   const alertCount = alerts.filter(a => !a.resolved).length;
+  const { addToast } = useToast();
+
+  useEffect(() => {
+    if (!latestNewAlert) return;
+    addToast(latestNewAlert.message || latestNewAlert.type, latestNewAlert.severity);
+  }, [latestNewAlert, addToast]);
 
   const mainPadBottom = isMobile
     ? 'calc(68px + env(safe-area-inset-bottom, 0px))'
@@ -166,6 +174,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
+        <ToastProvider>
         <BrowserRouter basename={basename}>
           <UpdateAvailableBanner />
           <Routes>
@@ -204,11 +213,22 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            <Route path="/management/*" element={<Navigate to="/manager/dashboard" replace />} />
+            {/* Management routes (owner + admin) */}
+            <Route path="/management/*" element={
+              <ProtectedRoute roles={['owner', 'admin']}>
+                <AppShell>
+                  <Routes>
+                    <Route path="overview" element={<Overview />} />
+                    <Route path="*"        element={<Navigate to="overview" replace />} />
+                  </Routes>
+                </AppShell>
+              </ProtectedRoute>
+            } />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Upload, CheckSquare, MessageSquare, PenLine,
-  Calendar, Users, LogOut,
+  Calendar, Users, LogOut, BarChart2,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import Avatar from '../UI/Avatar';
@@ -13,13 +13,14 @@ interface NavItem {
 }
 
 const managerNav: NavItem[] = [
-  { to: '/manager/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-  { to: '/manager/import',    icon: <Upload size={18} />,          label: 'Import' },
-  { to: '/manager/tasks',     icon: <CheckSquare size={18} />,     label: 'Tasks' },
-  { to: '/manager/standup',   icon: <MessageSquare size={18} />,   label: 'Standup' },
-  { to: '/manager/my-standup', icon: <PenLine size={18} />,         label: 'My standup' },
-  { to: '/manager/leave',     icon: <Calendar size={18} />,        label: 'Leave' },
-  { to: '/manager/team',      icon: <Users size={18} />,           label: 'Team' },
+  { to: '/management/overview', icon: <BarChart2 size={18} />,      label: 'Overview' },
+  { to: '/manager/dashboard',   icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
+  { to: '/manager/import',      icon: <Upload size={18} />,          label: 'Import' },
+  { to: '/manager/tasks',       icon: <CheckSquare size={18} />,     label: 'Tasks' },
+  { to: '/manager/standup',     icon: <MessageSquare size={18} />,   label: 'Standup' },
+  { to: '/manager/my-standup',  icon: <PenLine size={18} />,         label: 'My standup' },
+  { to: '/manager/leave',       icon: <Calendar size={18} />,        label: 'Leave' },
+  { to: '/manager/team',        icon: <Users size={18} />,           label: 'Team' },
 ];
 
 const memberNav: NavItem[] = [

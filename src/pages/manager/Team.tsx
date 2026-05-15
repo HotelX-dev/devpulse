@@ -3,6 +3,7 @@ import { Plus, X, Trash2, UserCheck, UserX, Link2, Pencil } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
+import { sortMembers } from '../../lib/utils';
 import Avatar from '../../components/UI/Avatar';
 import type { Member, MemberTicketMap, Role } from '../../types';
 
@@ -380,7 +381,7 @@ export default function Team() {
       supabase.from('members').select('*').order('name'),
       supabase.from('member_ticket_map').select('*').order('raw_name'),
     ]);
-    setMembers((mem ?? []) as Member[]);
+    setMembers(sortMembers((mem ?? []) as Member[]));
     setMaps((mp ?? []) as MemberTicketMap[]);
     setLoading(false);
   }

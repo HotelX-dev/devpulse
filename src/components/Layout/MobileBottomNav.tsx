@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Upload, CheckSquare, MessageSquare, Menu,
-  Calendar, Users, LogOut, X, PenLine,
+  Calendar, Users, LogOut, X, PenLine, BarChart2,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import type { Role } from '../../types';
@@ -119,6 +119,10 @@ function MoreSheet({
       }}>
         {isManager && (
           <>
+            <NavLink to="/management/overview" onClick={onClose} style={({ isActive }) => linkStyle(isActive)}>
+              <BarChart2 size={20} />
+              Overview
+            </NavLink>
             <NavLink to="/manager/leave" onClick={onClose} style={({ isActive }) => linkStyle(isActive)}>
               <Calendar size={20} />
               Leave Log
@@ -207,6 +211,7 @@ export default function MobileBottomNav() {
   const isManager = role === 'owner' || role === 'admin';
 
   const moreActive = isManager && (
+    location.pathname.startsWith('/management/') ||
     location.pathname.startsWith('/manager/leave') ||
     location.pathname.startsWith('/manager/team') ||
     location.pathname.startsWith('/manager/my-standup')

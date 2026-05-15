@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAlerts } from '../../hooks/useAlerts';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
-import { formatDate } from '../../lib/utils';
+import { formatDate, sortMembers } from '../../lib/utils';
 import MetricCard from '../../components/UI/MetricCard';
 import AlertBanner from '../../components/UI/AlertBanner';
 import ProductTabs from '../../components/UI/ProductTabs';
@@ -18,7 +18,8 @@ import type { Product, Member } from '../../types';
 
 function lastDayOfMonth(ym: string): string {
   const [y, m] = ym.split('-').map(Number);
-  return new Date(y, m, 0).toISOString().split('T')[0];
+  const d = new Date(y, m, 0); // last day of month, local
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function fmtMonth(ym: string): string {
@@ -62,7 +63,42 @@ interface TicketRow {
   priority: number;
   is_bug: boolean;
   is_enhancement: boolean;
+  ticket_ref: string | null;
+  description: string | null;
+  customer_name: string | null;
+  created_ts: string | null;
+  primary_member_id: string | null;
 }
+
+type AgeBand = 'fresh' | 'watch' | 'overdue' | 'critical';
+
+function ageBand(createdTs: string | null): AgeBand {
+  if (!createdTs) return 'watch';
+  const days = Math.floor((Date.now() - new Date(createdTs).getTime()) / 86_400_000);
+  if (days < 7)  return 'fresh';
+  if (days < 15) return 'watch';
+  if (days < 30) return 'overdue';
+  return 'critical';
+}
+
+function ageDays(createdTs: string | null): number {
+  if (!createdTs) return 0;
+  return Math.floor((Date.now() - new Date(createdTs).getTime()) / 86_400_000);
+}
+
+const AGE_BAND_COLOR: Record<AgeBand, string> = {
+  fresh:    'var(--green)',
+  watch:    'var(--amber)',
+  overdue:  'var(--red)',
+  critical: 'var(--red)',
+};
+
+const AGE_BAND_LABEL: Record<AgeBand, string> = {
+  fresh:    '< 7 days',
+  watch:    '7–14 days',
+  overdue:  '15–30 days',
+  critical: '30+ days',
+};
 
 /* ── Main component ── */
 export default function ManagerDashboard() {
@@ -97,7 +133,7 @@ export default function ManagerDashboard() {
       );
       setProducts(sorted);
       if (sorted.length > 0) setSelectedProduct(sorted[0].id);
-      const mems_ = mems ?? [];
+      const mems_ = sortMembers(mems ?? []);
       setMembers(mems_);
       const mm = new Map<string, string>();
       mems_.forEach(m => mm.set(m.id, m.name));
@@ -141,7 +177,7 @@ export default function ManagerDashboard() {
       // KPI + pipeline tickets for selected month
       supabase
         .from('ticket_imports')
-        .select('status, priority, is_bug, is_enhancement')
+        .select('status, priority, is_bug, is_enhancement, ticket_ref, description, customer_name, created_ts, primary_member_id')
         .eq('product_id', selectedProduct)
         .eq('imported_month', monthDate),
 
@@ -316,6 +352,82 @@ export default function ManagerDashboard() {
               <MetricCard label="Total"       value={kpi.total}       color="var(--accent)" />
             </div>
           </Section>
+
+          {/* ── Ticket Age ── */}
+          {(() => {
+            const activeTickets = tickets.filter(t =>
+              !['DEPLOYED', 'NO_ACTION'].includes(t.status) && t.created_ts,
+            );
+            const bands: Record<AgeBand, TicketRow[]> = {
+              fresh: [], watch: [], overdue: [], critical: [],
+            };
+            for (const t of activeTickets) bands[ageBand(t.created_ts)].push(t);
+            const criticalTickets = bands.critical
+              .sort((a, b) => ageDays(b.created_ts) - ageDays(a.created_ts))
+              .slice(0, 8);
+            const total = activeTickets.length || 1;
+
+            return (
+              <Section title="Ticket age">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* Age distribution bars */}
+                  <Card>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {(['fresh', 'watch', 'overdue', 'critical'] as AgeBand[]).map(band => {
+                        const count = bands[band].length;
+                        const pct   = Math.round((count / total) * 100);
+                        const color = AGE_BAND_COLOR[band];
+                        return (
+                          <div key={band} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 12, color: 'var(--text2)', width: 80, flexShrink: 0 }}>
+                              {AGE_BAND_LABEL[band]}
+                            </span>
+                            <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 4, transition: 'width 0.4s' }} />
+                            </div>
+                            <span style={{ fontSize: 12, fontWeight: 700, color, minWidth: 28, textAlign: 'right' }}>{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+
+                  {/* Critical tickets list */}
+                  {criticalTickets.length > 0 && (
+                    <Card style={{ padding: 0, overflow: 'hidden' }}>
+                      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 700, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Critical — open 30+ days ({bands.critical.length})
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {criticalTickets.map((t, i) => {
+                          const assignee = t.primary_member_id ? memberMap.get(t.primary_member_id) : undefined;
+                          const days = ageDays(t.created_ts);
+                          return (
+                            <div key={i} style={{
+                              display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '9px 16px',
+                              borderBottom: i < criticalTickets.length - 1 ? '1px solid var(--border)' : 'none',
+                            }}>
+                              <span style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)', flexShrink: 0, minWidth: 70 }}>
+                                {t.ticket_ref ?? '—'}
+                              </span>
+                              <span style={{ fontSize: 12, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {t.customer_name ? `${t.customer_name} — ` : ''}{t.description ?? ''}
+                              </span>
+                              {assignee && (
+                                <span style={{ fontSize: 11, color: 'var(--text2)', flexShrink: 0 }}>{assignee}</span>
+                              )}
+                              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', flexShrink: 0 }}>{days}d</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  )}
+                </div>
+              </Section>
+            );
+          })()}
 
           {/* ── Pipeline + Alerts row ── */}
           <div style={{

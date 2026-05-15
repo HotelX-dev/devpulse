@@ -41,3 +41,15 @@ export function monthLabel(dateStr: string): string {
 export function cn(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
 }
+
+const ROLE_ORDER: Record<string, number> = { owner: 0, admin: 1, member: 2 };
+
+/** Sort members: owner → admin → member, then A–Z within each role */
+export function sortMembers<T extends { role: string; name: string }>(members: T[]): T[] {
+  return [...members].sort((a, b) => {
+    const roleA = ROLE_ORDER[a.role] ?? 99;
+    const roleB = ROLE_ORDER[b.role] ?? 99;
+    if (roleA !== roleB) return roleA - roleB;
+    return a.name.localeCompare(b.name);
+  });
+}

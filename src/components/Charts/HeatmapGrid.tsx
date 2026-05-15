@@ -22,6 +22,10 @@ function getDaysInMonth(month: string): Date[] {
   return days;
 }
 
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 export default function HeatmapGrid({ members, entries, month }: HeatmapGridProps) {
@@ -69,7 +73,7 @@ export default function HeatmapGrid({ members, entries, month }: HeatmapGridProp
         const memberDays = days.filter(d => {
           const dow = d.getDay();
           if (dow === 0 || dow === 6) return false;
-          const key = `${member.id}::${d.toISOString().split('T')[0]}`;
+          const key = `${member.id}::${localDateStr(d)}`;
           return submitted.has(key);
         }).length;
 
@@ -102,7 +106,7 @@ export default function HeatmapGrid({ members, entries, month }: HeatmapGridProp
 
             {/* Day cells */}
             {days.map(day => {
-              const dateStr = day.toISOString().split('T')[0];
+              const dateStr = localDateStr(day);
               const dow = day.getDay();
               const isWknd = dow === 0 || dow === 6;
               const isDone = submitted.has(`${member.id}::${dateStr}`);

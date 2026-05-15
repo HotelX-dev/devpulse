@@ -103,6 +103,8 @@ export interface Task {
   created_by: string;
   created_at: string;
   closed_at: string | null;
+  committed_date: string | null;
+  actual_delivery: string | null;
 }
 
 export interface LeaveLog {

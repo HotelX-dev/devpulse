@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
+import { sortMembers } from '../../lib/utils';
 import type { Task, Member, Product, TaskStatus } from '../../types';
 
 /* ── constants ── */
@@ -446,6 +447,23 @@ function TaskCard({
               {task.actual_days != null ? `${task.actual_days}/${task.est_days}d` : `${task.est_days}d est`}
             </span>
           )}
+          {task.committed_date && task.actual_delivery && (() => {
+            const variance = Math.round(
+              (new Date(task.actual_delivery).getTime() - new Date(task.committed_date).getTime()) / 86_400_000,
+            );
+            const onTime = variance <= 0;
+            return (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                color: onTime ? 'var(--green)' : 'var(--red)',
+                background: onTime ? 'var(--green-dim)' : 'var(--red-dim)',
+              }}>
+                {onTime
+                  ? variance === 0 ? 'On time' : `${Math.abs(variance)}d early`
+                  : `${variance}d late`}
+              </span>
+            );
+          })()}
         </div>
       </div>
 
@@ -538,7 +556,7 @@ export default function Tasks() {
       supabase.from('members').select('*').eq('active', true).in('role', ['owner', 'admin', 'member']).order('name'),
       supabase.from('products').select('*'),
     ]).then(([{ data: mems }, { data: prods }]) => {
-      setMembers(mems ?? []);
+      setMembers(sortMembers(mems ?? []));
       const sorted = (prods ?? []).sort((a, b) => CODE_ORDER.indexOf(a.code) - CODE_ORDER.indexOf(b.code));
       setProducts(sorted);
     });
@@ -578,6 +596,8 @@ export default function Tasks() {
       jira_ref:    form.jira_ref ?? null,
       created_by:  form.created_by ?? member?.id,
       closed_at:   isDone ? new Date().toISOString() : null,
+      // committed_date locked by DB trigger — only pass on new tasks (insert path)
+      ...(form.id ? {} : { committed_date: form.due_date ?? null }),
     };
 
     if (isEdit) {

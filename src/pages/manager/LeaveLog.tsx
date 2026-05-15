@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
+import { sortMembers } from '../../lib/utils';
 import Avatar from '../../components/UI/Avatar';
 import type { Member, LeaveLog as LeaveLogType, LeaveType } from '../../types';
 
@@ -486,7 +487,7 @@ export default function LeaveLog() {
       .eq('active', true)
       .in('role', ['owner', 'admin', 'member'])
       .order('name')
-      .then(({ data }) => setMembers(data ?? []));
+      .then(({ data }) => setMembers(sortMembers(data ?? [])));
   }, []);
 
   useEffect(() => {

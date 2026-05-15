@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Plane } from 'lucide-r
 import { supabase } from '../../lib/supabase';
 import Avatar from '../../components/UI/Avatar';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
+import { sortMembers } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
 import type { Member } from '../../types';
 
@@ -140,7 +141,7 @@ export default function ManagerStandup() {
       supabase.from('members').select('*').eq('active', true).in('role', ['owner', 'admin', 'member']).order('name'),
       supabase.from('products').select('id, name'),
     ]).then(([{ data: mems }, { data: prods }]) => {
-      setMembers(mems ?? []);
+      setMembers(sortMembers(mems ?? []));
       const pm: ProductMap = {};
       (prods ?? []).forEach(p => { pm[p.id] = p.name; });
       setProducts(pm);
