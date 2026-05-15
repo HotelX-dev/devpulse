@@ -1,15 +1,16 @@
-# Builds the Vite app and publishes dist/ to GitHub Pages (project site: /<repo>/).
-# `npm run build` runs `prebuild` → writes public/version.json (commit SHA in CI) so
-# clients can detect a newer deploy and show a refresh banner.
+# Builds the Vite app and publishes dist/ to the gh-pages branch.
+# Project site URL: https://<org>.github.io/<repo>/
 #
-# Repo settings: Settings → Pages → Build and deployment → Source: GitHub Actions
+# One-time repo setup (Settings → Pages):
+#   Build and deployment → Source: Deploy from a branch
+#   Branch: gh-pages   Folder: / (root)
 #
 # Secrets (Settings → Secrets and variables → Actions):
 #   VITE_SUPABASE_URL
 #   VITE_SUPABASE_ANON_KEY
 #
-# If the repo is <user>.github.io (site at https://<user>.github.io/), change the
-# build env to: VITE_BASE_PATH: /
+# If the repo is <user>.github.io (site at https://<user>.github.io/), set:
+#   VITE_BASE_PATH: /
 
 name: Deploy GitHub Pages
 
@@ -19,16 +20,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,16 +50,8 @@ jobs:
       - name: SPA fallback (refresh on deep links)
         run: cp dist/index.html dist/404.html
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Publish dist to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
