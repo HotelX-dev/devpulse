@@ -29,8 +29,22 @@ function toDateStr(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
+async function getPublicHolidays(): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'public_holidays')
+    .maybeSingle();
+  try {
+    const arr: { date: string }[] = data?.value ? JSON.parse(data.value) : [];
+    return new Set(arr.map(h => h.date));
+  } catch {
+    return new Set();
+  }
+}
+
 /* Count consecutive working days with no standup going back from yesterday */
-async function getMissingStreak(memberId: string, today: string): Promise<number> {
+async function getMissingStreak(memberId: string, today: string, holidays: Set<string>): Promise<number> {
   let streak = 0;
   const cur = subDays(new Date(today), 1);
 
@@ -38,6 +52,8 @@ async function getMissingStreak(memberId: string, today: string): Promise<number
     if (isWeekend(cur)) { cur.setDate(cur.getDate() - 1); continue; }
 
     const dateStr = toDateStr(cur);
+
+    if (holidays.has(dateStr)) { cur.setDate(cur.getDate() - 1); continue; }
 
     const { data: leave } = await supabase
       .from('leave_log')
@@ -103,8 +119,11 @@ serve(async () => {
     const todayStr = toDateStr(today);
     const monthStart = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
 
-    // ── 1. Standup check (working days only) ──────────────────────────────────
-    if (!isWeekend(today)) {
+    const holidays = await getPublicHolidays();
+    const isHoliday = holidays.has(todayStr);
+
+    // ── 1. Standup check (working days + non-holidays only) ───────────────────
+    if (!isWeekend(today) && !isHoliday) {
       const { data: members } = await supabase
         .from('members')
         .select('id, name')
@@ -138,7 +157,7 @@ serve(async () => {
         );
 
         if (!submitted && !onLeave) {
-          const streak = await getMissingStreak(member.id, todayStr);
+          const streak = await getMissingStreak(member.id, todayStr, holidays);
           if (streak >= 2) {
             await insertAlert(
               'MISSING_STANDUP', member.id, null, null,

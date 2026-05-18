@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, X, Trash2, UserCheck, UserX, Link2, Pencil, RefreshCw } from 'lucide-react';
+import { Plus, X, Trash2, UserCheck, UserX, Link2, Pencil, RefreshCw, CalendarOff } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
@@ -461,6 +461,197 @@ function DiscordSettings({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
+/* ── HolidaySettings ── */
+interface Holiday { date: string; name: string; }
+
+function HolidaySettings({ isAdmin }: { isAdmin: boolean }) {
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [saving,  setSaving]    = useState(false);
+  const [newDate, setNewDate]   = useState('');
+  const [newName, setNewName]   = useState('');
+  const [err,     setErr]       = useState('');
+
+  async function load() {
+    const { data } = await supabase.from('app_settings')
+      .select('value').eq('key', 'public_holidays').maybeSingle();
+    try {
+      setHolidays(data?.value ? JSON.parse(data.value) : []);
+    } catch { setHolidays([]); }
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function save(updated: Holiday[]) {
+    setSaving(true);
+    await supabase.from('app_settings').upsert({
+      key: 'public_holidays',
+      value: JSON.stringify(updated),
+      updated_at: new Date().toISOString(),
+    });
+    setSaving(false);
+  }
+
+  async function handleAdd() {
+    if (!newDate) { setErr('Date is required.'); return; }
+    if (!newName.trim()) { setErr('Holiday name is required.'); return; }
+    if (holidays.some(h => h.date === newDate)) { setErr('This date is already added.'); return; }
+    setErr('');
+    const updated = [...holidays, { date: newDate, name: newName.trim() }]
+      .sort((a, b) => a.date.localeCompare(b.date));
+    setHolidays(updated);
+    await save(updated);
+    setNewDate('');
+    setNewName('');
+  }
+
+  async function handleRemove(date: string) {
+    const updated = holidays.filter(h => h.date !== date);
+    setHolidays(updated);
+    await save(updated);
+  }
+
+  if (loading) return <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
+
+  const upcoming = holidays.filter(h => h.date >= new Date().toISOString().split('T')[0]);
+  const past     = holidays.filter(h => h.date <  new Date().toISOString().split('T')[0]);
+
+  return (
+    <div style={{
+      background: 'var(--bg2)', border: '1px solid var(--border)',
+      borderRadius: 12, padding: 24, display: 'grid', gap: 20,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <CalendarOff size={18} color="var(--accent)" />
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Public Holidays</div>
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginTop: -12 }}>
+        Standup alerts are suppressed on public holidays. Members won't be flagged for missing standup on these dates.
+      </div>
+
+      {/* Add form */}
+      {!isAdmin && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: '0 0 160px' }}>
+            <label style={labelStyle}>Date</label>
+            <input
+              type="date"
+              value={newDate}
+              onChange={e => setNewDate(e.target.value)}
+              style={{ ...inp, colorScheme: 'dark' }}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label style={labelStyle}>Holiday name</label>
+            <input
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="e.g. Hari Raya Aidilfitri"
+              style={inp}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()}
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={saving}
+            style={{
+              padding: '8px 18px', borderRadius: 8, border: 'none',
+              background: 'var(--accent)', color: '#fff', fontSize: 13,
+              fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
+              opacity: saving ? 0.7 : 1, whiteSpace: 'nowrap',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Plus size={14} style={{ marginRight: 5, verticalAlign: 'middle' }} />
+            Add
+          </button>
+        </div>
+      )}
+      {err && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: -12 }}>{err}</div>}
+
+      {/* Upcoming holidays */}
+      {upcoming.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+            Upcoming
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {upcoming.map(h => (
+              <div key={h.date} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 14px', borderRadius: 8,
+                background: 'var(--bg3)', border: '1px solid var(--border)',
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: 'var(--accent)',
+                  fontFamily: 'var(--font-mono)', flexShrink: 0,
+                }}>
+                  {new Date(h.date + 'T00:00:00').toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </div>
+                <div style={{ flex: 1, fontSize: 13, color: 'var(--text)' }}>{h.name}</div>
+                {!isAdmin && (
+                  <button
+                    onClick={() => handleRemove(h.date)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text3)', padding: 4, borderRadius: 4, display: 'flex',
+                    }}
+                    title="Remove holiday"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Past holidays (collapsed appearance) */}
+      {past.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+            Past ({past.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {past.map(h => (
+              <div key={h.date} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '8px 14px', borderRadius: 8,
+                background: 'transparent', border: '1px solid var(--border)',
+                opacity: 0.5,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                  {new Date(h.date + 'T00:00:00').toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </div>
+                <div style={{ flex: 1, fontSize: 12, color: 'var(--text2)' }}>{h.name}</div>
+                {!isAdmin && (
+                  <button
+                    onClick={() => handleRemove(h.date)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text3)', padding: 4, borderRadius: 4, display: 'flex',
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {holidays.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 13, color: 'var(--text3)' }}>
+          No holidays added yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main ── */
 type Tab = 'members' | 'map' | 'integrations';
 
@@ -728,7 +919,10 @@ export default function Team() {
         </div>
       ) : (
         /* ── Integrations ── */
-        <DiscordSettings isAdmin={isAdmin} />
+        <div style={{ display: 'grid', gap: 16 }}>
+          <DiscordSettings isAdmin={isAdmin} />
+          <HolidaySettings isAdmin={isAdmin} />
+        </div>
       )}
 
       {showAdd && (
