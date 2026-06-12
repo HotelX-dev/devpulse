@@ -94,7 +94,21 @@ interface TicketRow {
   primary_member_id: string | null;
   is_bug: boolean | null;
   is_enhancement: boolean | null;
+  ticket_ref: string | null;
+  priority: number | null;
 }
+
+interface MemberTicketLite {
+  ticket_ref: string;
+  status: string;
+  priority: number | null;
+  product_id: string;
+}
+
+// Active work first, finished last — used to sort the per-member ticket list.
+const MEMBER_TICKET_STATUS_ORDER: Record<string, number> = {
+  REOPEN: 0, OPEN: 1, IN_PROGRESS: 2, QC: 3, TO_DEPLOY: 4, NO_ACTION: 5, DEPLOYED: 6,
+};
 
 interface BugEnh {
   bugs: number;
@@ -254,12 +268,16 @@ function MemberCard({
   ticketCount,
   maxTickets,
   lastStandup,
+  onClick,
 }: {
   member: Member;
   ticketCount: number;
   maxTickets: number;
   lastStandup: string | undefined;
+  onClick?: () => void;
 }) {
+  const [hover, setHover] = useState(false);
+  const clickable = !!onClick && ticketCount > 0;
   const standupDays = lastStandup ? daysSince(lastStandup) : 999;
   const standupColor = standupDays === 0
     ? 'var(--green)'
@@ -290,12 +308,22 @@ function MemberCard({
     : 'var(--green)';
 
   return (
-    <div style={{
-      position: 'relative', overflow: 'hidden',
-      background: 'var(--bg2)', border: '1px solid var(--border)',
-      borderRadius: 14, padding: '15px 16px 14px',
-      display: 'flex', flexDirection: 'column', gap: 11,
-    }}>
+    <div
+      onClick={clickable ? onClick : undefined}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={clickable ? `View ${member.name.split(' ')[0]}'s ${ticketCount} ticket${ticketCount === 1 ? '' : 's'}` : undefined}
+      style={{
+        position: 'relative', overflow: 'hidden',
+        background: 'var(--bg2)',
+        border: `1px solid ${clickable && hover ? 'var(--accent)' : 'var(--border)'}`,
+        borderRadius: 14, padding: '15px 16px 14px',
+        display: 'flex', flexDirection: 'column', gap: 11,
+        cursor: clickable ? 'pointer' : 'default',
+        transform: clickable && hover ? 'translateY(-2px)' : 'none',
+        transition: 'transform 0.15s ease, border-color 0.15s ease',
+      }}
+    >
       {/* Role accent strip */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: 3,
@@ -336,11 +364,20 @@ function MemberCard({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tickets</span>
-          <span style={{
-            fontSize: 11, fontWeight: 700,
-            color: ticketCount > 0 ? 'var(--text)' : 'var(--text3)',
-          }}>
-            {ticketCount}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700,
+              color: ticketCount > 0 ? 'var(--text)' : 'var(--text3)',
+            }}>
+              {ticketCount}
+            </span>
+            {clickable && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, lineHeight: 1,
+                color: hover ? 'var(--accent)' : 'var(--text3)',
+                transition: 'color 0.15s ease',
+              }}>›</span>
+            )}
           </span>
         </div>
         <div style={{ height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
@@ -364,6 +401,117 @@ function MemberCard({
         <span style={{ fontSize: 10.5, color: standupColor, fontWeight: 600 }}>
           {standupDays >= 7 ? 'No recent standup' : `Standup ${standupLabel.toLowerCase()}`}
         </span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Member ticket drill-down modal ── */
+function MemberTicketsModal({
+  member, tickets, productById, monthLabel, onClose,
+}: {
+  member: Member;
+  tickets: MemberTicketLite[];
+  productById: Map<string, Product>;
+  monthLabel: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const sorted = [...tickets].sort((a, b) => {
+    const oa = MEMBER_TICKET_STATUS_ORDER[a.status] ?? 99;
+    const ob = MEMBER_TICKET_STATUS_ORDER[b.status] ?? 99;
+    if (oa !== ob) return oa - ob;
+    if ((a.priority ?? 2) !== (b.priority ?? 2)) return (a.priority ?? 2) - (b.priority ?? 2);
+    return (a.ticket_ref ?? '').localeCompare(b.ticket_ref ?? '');
+  });
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        animation: 'fadeIn 0.15s ease',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg2)', border: '1px solid var(--border)',
+          borderRadius: 14, width: 'min(480px, 94vw)', maxHeight: '80vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 11,
+          padding: '14px 18px', borderBottom: '1px solid var(--border)',
+        }}>
+          <Avatar name={member.name} color={member.avatar_color} size="md" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{member.name}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>
+              {tickets.length} ticket{tickets.length === 1 ? '' : 's'} · {monthLabel}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              padding: '4px 6px', cursor: 'pointer', color: 'var(--text2)',
+              display: 'flex', alignItems: 'center', flexShrink: 0,
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Ticket list */}
+        <div style={{ overflowY: 'auto', padding: '6px 0' }}>
+          {sorted.length === 0 ? (
+            <div style={{ padding: '24px 18px', fontSize: 13, color: 'var(--text3)', textAlign: 'center' }}>
+              No tickets for {member.name.split(' ')[0]} in {monthLabel}.
+            </div>
+          ) : sorted.map((t, i) => {
+            const prod = productById.get(t.product_id);
+            const isP1 = t.priority === 1;
+            return (
+              <div
+                key={`${t.ticket_ref}-${i}`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '9px 18px',
+                  borderBottom: i < sorted.length - 1 ? '1px solid var(--border)' : 'none',
+                }}
+              >
+                <span style={{
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 12.5, fontWeight: 700,
+                  color: 'var(--accent)', minWidth: 78,
+                }}>
+                  {t.ticket_ref}
+                </span>
+                <StatusBadge
+                  label={TICKET_STATUS_LABEL[t.status] ?? t.status}
+                  color={TICKET_STATUS_COLOR[t.status] ?? 'var(--text3)'}
+                />
+                <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {prod?.name ?? '—'}
+                </span>
+                <StatusBadge
+                  label={`P${t.priority ?? 2}`}
+                  color={isP1 ? 'var(--red)' : 'var(--text3)'}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -680,6 +828,8 @@ export default function Overview() {
   const [members, setMembers]                     = useState<Member[]>([]);
   const [memberMap, setMemberMap]                 = useState<Map<string, Member>>(new Map());
   const [memberTicketCounts, setMemberTicketCounts] = useState<Map<string, number>>(new Map());
+  const [memberTickets, setMemberTickets]         = useState<Map<string, MemberTicketLite[]>>(new Map());
+  const [selectedMemberId, setSelectedMemberId]   = useState<string | null>(null);
   const [memberLastStandup, setMemberLastStandup] = useState<Map<string, string>>(new Map());
   const [baseLoading, setBaseLoading]             = useState(true);
 
@@ -759,11 +909,12 @@ export default function Overview() {
 
     supabase
       .from('ticket_imports')
-      .select('product_id, status, primary_member_id, is_bug, is_enhancement')
+      .select('product_id, status, primary_member_id, is_bug, is_enhancement, ticket_ref, priority')
       .eq('imported_month', selectedMonth + '-01')
       .then(({ data: tix }) => {
         const stats = new Map<string, ProductStats>();
         const memberCounts = new Map<string, number>();
+        const memberTix = new Map<string, MemberTicketLite[]>();
         const be = new Map<string, BugEnh>();
 
         for (const row of (tix ?? []) as TicketRow[]) {
@@ -793,11 +944,22 @@ export default function Overview() {
               row.primary_member_id,
               (memberCounts.get(row.primary_member_id) ?? 0) + 1
             );
+            if (row.ticket_ref) {
+              const list = memberTix.get(row.primary_member_id) ?? [];
+              list.push({
+                ticket_ref: row.ticket_ref,
+                status: row.status,
+                priority: row.priority,
+                product_id: row.product_id,
+              });
+              memberTix.set(row.primary_member_id, list);
+            }
           }
         }
 
         setProductStats(stats);
         setMemberTicketCounts(memberCounts);
+        setMemberTickets(memberTix);
         setBugEnh(be);
         setStatsLoading(false);
       });
@@ -1079,6 +1241,7 @@ export default function Overview() {
                   ticketCount={memberTicketCounts.get(m.id) ?? 0}
                   maxTickets={maxTickets}
                   lastStandup={memberLastStandup.get(m.id)}
+                  onClick={() => setSelectedMemberId(m.id)}
                 />
               ))}
             </div>
@@ -1465,6 +1628,17 @@ export default function Overview() {
         </Card>
       </Section>
       </div>
+
+      {/* ── Member ticket drill-down ── */}
+      {selectedMemberId && memberMap.get(selectedMemberId) && (
+        <MemberTicketsModal
+          member={memberMap.get(selectedMemberId)!}
+          tickets={memberTickets.get(selectedMemberId) ?? []}
+          productById={new Map(products.map(p => [p.id, p]))}
+          monthLabel={fmtMonth(selectedMonth)}
+          onClose={() => setSelectedMemberId(null)}
+        />
+      )}
 
     </div>
   );
