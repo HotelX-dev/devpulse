@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import Avatar from '../UI/Avatar';
+import Logo from '../UI/Logo';
 
 interface NavItem {
   to: string;
@@ -78,22 +79,7 @@ export default function Sidebar() {
         alignItems: 'center',
         gap: 10,
       }}>
-        <div style={{
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          background: 'var(--accent)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontWeight: 700,
-          fontSize: 13,
-          color: '#fff',
-          flexShrink: 0,
-        }}>
-          DP
-        </div>
-        <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>DevPulse</span>
+        <Logo height={26} />
       </div>
 
       {/* Nav */}

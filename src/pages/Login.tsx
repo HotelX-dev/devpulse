@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import Logo from '../components/UI/Logo';
 
 const REMEMBER_EMAIL_KEY = 'devpulse_login_email';
 
@@ -95,25 +96,9 @@ export default function Login() {
         gap: 24,
       }}>
         {/* Brand */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            background: 'var(--accent)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 800,
-            fontSize: 17,
-            color: '#fff',
-          }}>
-            DP
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>DevPulse</div>
-            <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 2 }}>Your team's heartbeat</div>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <Logo height={40} />
+          <div style={{ fontSize: 13, color: 'var(--text2)' }}>Your team's heartbeat</div>
         </div>
 
         {/* Form */}
