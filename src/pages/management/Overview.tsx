@@ -898,6 +898,15 @@ export default function Overview() {
     [products]
   );
 
+  // Average monthly ticket inflow over the trend window, for the selected scope
+  const trendAvg = useMemo(() => {
+    if (trend.length === 0) return 0;
+    const keys = trendProduct ? [trendProduct] : products.map(p => p.code);
+    let sum = 0;
+    for (const pt of trend) for (const k of keys) sum += Number(pt[k]) || 0;
+    return Math.round(sum / trend.length);
+  }, [trend, trendProduct, products]);
+
   const filteredTasks = useMemo(() => {
     if (!backlogProduct) return tasks;
     return tasks.filter(t => t.product_id === backlogProduct);
@@ -1117,6 +1126,14 @@ export default function Overview() {
                 </div>
               }
             >
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+                <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent)', lineHeight: 1 }}>
+                  {trendAvg}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+                  avg tickets / month · {trendProduct ?? 'all products'} · last 6 mo
+                </span>
+              </div>
               <TrendChart
                 data={trend}
                 series={trendProduct ? trendSeries.filter(s => s.key === trendProduct) : trendSeries}
