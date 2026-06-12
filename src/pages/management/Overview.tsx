@@ -223,6 +223,12 @@ function MemberCard({
     : standupDays <= 2
     ? 'var(--amber)'
     : 'var(--red)';
+  const standupDim = standupDays === 0
+    ? 'var(--green-dim)'
+    : standupDays <= 2
+    ? 'var(--amber-dim)'
+    : 'var(--red-dim)';
+  const roleColor = ROLE_COLOR[member.role] ?? 'var(--text3)';
   const standupLabel = standupDays === 0
     ? 'Today'
     : standupDays === 1
@@ -242,10 +248,17 @@ function MemberCard({
 
   return (
     <div style={{
+      position: 'relative', overflow: 'hidden',
       background: 'var(--bg2)', border: '1px solid var(--border)',
-      borderRadius: 12, padding: '14px 16px',
-      display: 'flex', flexDirection: 'column', gap: 10,
+      borderRadius: 14, padding: '15px 16px 14px',
+      display: 'flex', flexDirection: 'column', gap: 11,
     }}>
+      {/* Role accent strip */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+        background: `linear-gradient(90deg, ${roleColor}, transparent 75%)`,
+      }} />
+
       {/* Top row: avatar + name + standup dot */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -297,11 +310,17 @@ function MemberCard({
         </div>
       </div>
 
-      {/* Standup row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <div style={{ width: 7, height: 7, borderRadius: '50%', background: standupColor, flexShrink: 0 }} />
-        <span style={{ fontSize: 11, color: standupColor, fontWeight: 600 }}>{standupLabel}</span>
-        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>standup</span>
+      {/* Standup status pill */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        alignSelf: 'flex-start',
+        padding: '4px 9px', borderRadius: 99,
+        background: standupDim,
+      }}>
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: standupColor, flexShrink: 0 }} />
+        <span style={{ fontSize: 10.5, color: standupColor, fontWeight: 600 }}>
+          {standupDays >= 7 ? 'No recent standup' : `Standup ${standupLabel.toLowerCase()}`}
+        </span>
       </div>
     </div>
   );
@@ -730,11 +749,7 @@ export default function Overview() {
         {(() => {
           const maxTickets = Math.max(1, ...members.map(m => memberTicketCounts.get(m.id) ?? 0));
           return (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
-              gap: 10,
-            }}>
+            <div className="dp-member-grid">
               {members.map(m => (
                 <MemberCard
                   key={m.id}

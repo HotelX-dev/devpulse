@@ -89,6 +89,28 @@ body {
   display: none;
 }
 
+/* Active-members grid: 5 → 3 → 2 columns, last row centered */
+.dp-member-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.dp-member-grid > * {
+  flex: 0 1 calc((100% - 4 * 10px) / 5);
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .dp-member-grid > * {
+    flex-basis: calc((100% - 2 * 10px) / 3);
+  }
+}
+@media (max-width: 640px) {
+  .dp-member-grid > * {
+    flex-basis: calc((100% - 10px) / 2);
+  }
+}
+
 button {
   cursor: pointer;
   font-family: inherit;
