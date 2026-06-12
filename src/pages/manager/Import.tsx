@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, X } from 'lucide-react';
+import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, X, RefreshCw, Database } from 'lucide-react';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { supabase } from '../../lib/supabase';
 import { parseCSV, workbookBytesToCsv, type ParsedTicket } from '../../lib/csvParser';
@@ -610,6 +610,157 @@ function SuccessScreen({ count, productName, month, snapshotWarning, onReset }: 
   );
 }
 
+/* ── Resync-from-database panel ── */
+interface ResyncProductResult {
+  product_id: string;
+  inserted?: number;
+  matched?: number;
+  unmatched?: number;
+  error?: string;
+}
+interface ResyncResponse {
+  ok?: boolean;
+  error?: string;
+  month_range?: { from: string; to: string } | null;
+  months_spanned?: number;
+  total_source_rows?: number;
+  products_synced?: number;
+  results?: ResyncProductResult[];
+  skipped_no_ref?: number;
+  skipped_unknown_codes?: Record<string, number>;
+}
+
+function ResyncCard() {
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<ResyncResponse | null>(null);
+  const [error, setError] = useState('');
+
+  async function run() {
+    setBusy(true);
+    setError('');
+    setResult(null);
+    setConfirming(false);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke<ResyncResponse>('resync-tickets');
+      if (fnErr) throw new Error(fnErr.message);
+      if (data?.error) throw new Error(data.error);
+      setResult(data ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Resync failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const totalInserted = (result?.results ?? []).reduce((s, r) => s + (r.inserted ?? 0), 0);
+  const unknownCodes = Object.entries(result?.skipped_unknown_codes ?? {});
+
+  return (
+    <Card style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 42, height: 42, borderRadius: 10, flexShrink: 0,
+          background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Database size={20} color="var(--accent)" />
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+            Resync from source database
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 4, lineHeight: 1.5 }}>
+            Pulls the full ticket log directly from the source DB and <strong style={{ color: 'var(--text2)' }}>replaces</strong> each
+            product's existing tickets. No file needed. Each ticket is filed under its own created-month.
+          </div>
+        </div>
+        {!confirming ? (
+          <Btn onClick={() => setConfirming(true)} disabled={busy} icon={<RefreshCw size={15} />}>
+            Resync now
+          </Btn>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <Btn onClick={() => setConfirming(false)} variant="ghost" disabled={busy}>Cancel</Btn>
+            <Btn onClick={run} variant="danger" disabled={busy} icon={busy ? undefined : <Check size={15} />}>
+              {busy ? 'Syncing…' : 'Confirm replace'}
+            </Btn>
+          </div>
+        )}
+      </div>
+
+      {confirming && !busy && (
+        <div style={{
+          marginTop: 14, display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 14px', borderRadius: 8,
+          background: 'var(--amber-dim)', border: '1px solid var(--amber)44',
+          fontSize: 13, color: 'var(--amber)',
+        }}>
+          <AlertTriangle size={15} />
+          This deletes and rebuilds every product's tickets from the source view. This cannot be undone.
+        </div>
+      )}
+
+      {error && (
+        <div style={{
+          marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '10px 14px', borderRadius: 8,
+          background: 'var(--red-dim)', border: '1px solid var(--red)33',
+          fontSize: 13, color: 'var(--red)',
+        }}>
+          <X size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+          {error}
+        </div>
+      )}
+
+      {result?.ok && (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 14px', borderRadius: 8,
+            background: 'var(--green-dim)', border: '1px solid var(--green)44',
+            fontSize: 13, color: 'var(--green)',
+          }}>
+            <Check size={15} />
+            Synced {totalInserted.toLocaleString()} tickets across {result.products_synced} product(s)
+            from {result.total_source_rows?.toLocaleString()} source rows
+            {result.month_range
+              ? ` — spanning ${result.month_range.from} → ${result.month_range.to} (${result.months_spanned} months)`
+              : ''}.
+          </div>
+
+          {(result.results ?? []).some(r => r.error) && (
+            <div style={{ fontSize: 12, color: 'var(--red)' }}>
+              {(result.results ?? []).filter(r => r.error).map(r => (
+                <div key={r.product_id}>⚠ {r.product_id}: {r.error}</div>
+              ))}
+            </div>
+          )}
+
+          {(unknownCodes.length > 0 || (result.skipped_no_ref ?? 0) > 0) && (
+            <div style={{
+              padding: '8px 14px', borderRadius: 8, fontSize: 12,
+              background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text2)',
+            }}>
+              {unknownCodes.length > 0 && (
+                <div>
+                  Skipped unknown product codes:{' '}
+                  {unknownCodes.map(([code, n]) => `${code || '(blank)'} (${n})`).join(', ')}
+                  {' '}— add these to the products table to include them.
+                </div>
+              )}
+              {(result.skipped_no_ref ?? 0) > 0 && (
+                <div style={{ marginTop: unknownCodes.length ? 4 : 0 }}>
+                  Skipped {result.skipped_no_ref} row(s) with no ticket reference.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ── Main component ── */
 export default function Import() {
   const [step, setStep]               = useState<Step>(1);
@@ -829,9 +980,11 @@ export default function Import() {
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Import tickets</h2>
         <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>
-          Choose product and import type, then upload a CSV or Excel export. Preview before confirming.
+          Resync directly from the source database, or upload a CSV/Excel export and preview before confirming.
         </p>
       </div>
+
+      {!done && <ResyncCard />}
 
       {!done && <Stepper step={step} />}
 
