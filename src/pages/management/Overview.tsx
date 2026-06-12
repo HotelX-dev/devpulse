@@ -1,6 +1,14 @@
 // Phase 11 — Management Overview (owner + admin)
-import { useEffect, useMemo, useState } from 'react';
-import { TrendingUp, Users, Activity, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  TrendingUp, Users, Activity, ChevronLeft, ChevronRight, X,
+  Maximize2, Minimize2, Plus, Sun, Moon,
+} from 'lucide-react';
+import {
+  ResponsiveContainer, XAxis, YAxis, Tooltip,
+  PieChart, Pie, Cell, BarChart, Bar,
+  LineChart, Line, Legend, LabelList,
+} from 'recharts';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -84,7 +92,42 @@ interface TicketRow {
   product_id: string;
   status: string;
   primary_member_id: string | null;
+  is_bug: boolean | null;
+  is_enhancement: boolean | null;
 }
+
+interface BugEnh {
+  bugs: number;
+  enh: number;
+}
+
+interface TrendPoint {
+  month: string;   // 'YYYY-MM'
+  label: string;   // 'May'
+  [productCode: string]: number | string;  // one count per product code
+}
+
+interface TrendSeries {
+  key: string;     // product code, e.g. 'HOTEL'
+  color: string;
+}
+
+// Line colors for per-product trend series (cycled by product order)
+const PRODUCT_COLORS = ['var(--blue)', 'var(--green)', 'var(--pink)', 'var(--amber)', 'var(--accent)'];
+
+/* chart palette — CSS vars so charts follow light/dark theme */
+const CHART = {
+  open:       'var(--red)',
+  inProgress: 'var(--blue)',
+  qc:         'var(--purple)',
+  toDeploy:   'var(--amber)',
+  deployed:   'var(--green)',
+  reopen:     'var(--pink)',
+  noAction:   'var(--text3)',
+  accent:     'var(--accent)',
+  bug:        'var(--red)',
+  enh:        'var(--blue)',
+};
 
 interface ProductStats {
   open: number;
@@ -517,6 +560,111 @@ function TicketDetailPanel({
   );
 }
 
+/* ── Chart components (Recharts) ── */
+
+const tooltipStyle: React.CSSProperties = {
+  background: 'var(--bg3)', border: '1px solid var(--border2)',
+  borderRadius: 8, fontSize: 12, color: 'var(--text)', padding: '6px 10px',
+};
+
+function ChartCard({ title, action, children }: {
+  title: string; action?: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div className="dp-card-accent" style={{
+      background: 'var(--bg2)', border: '1px solid var(--border)',
+      borderRadius: 14, padding: '14px 16px',
+    }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', marginBottom: 8,
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{title}</span>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TrendChart({ data, series }: { data: TrendPoint[]; series: TrendSeries[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={170}>
+      <LineChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: 'var(--text3)' }} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: 'var(--border2)' }} />
+        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} iconType="plainline" />
+        {series.map(s => (
+          <Line key={s.key} type="monotone" dataKey={s.key} name={s.key}
+            stroke={s.color} strokeWidth={2.5} dot={{ r: 2.5, fill: s.color }} activeDot={{ r: 5 }} />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function StatusDonut({ data, total }: {
+  data: { name: string; value: number; color: string }[]; total: number;
+}) {
+  return (
+    <div style={{ position: 'relative', width: 132, height: 132, flexShrink: 0 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%"
+            innerRadius={43} outerRadius={62} paddingAngle={2} stroke="none">
+            {data.map((d, i) => <Cell key={i} fill={d.color} />)}
+          </Pie>
+          <Tooltip contentStyle={tooltipStyle} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+      }}>
+        <div style={{ fontSize: 23, fontWeight: 700, color: 'var(--text)' }}>{total}</div>
+        <div style={{ fontSize: 10, color: 'var(--text2)' }}>tickets</div>
+      </div>
+    </div>
+  );
+}
+
+function BugsEnhChart({ data }: { data: { product: string; bugs: number; enh: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={150}>
+      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }} barGap={4}>
+        <XAxis dataKey="product" tick={{ fontSize: 11, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: 'var(--text3)' }} axisLine={false} tickLine={false} width={34} allowDecimals={false} />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--accent-dim)' }} />
+        <Bar dataKey="bugs" name="Bugs" fill={CHART.bug} radius={[4, 4, 0, 0]} maxBarSize={28}>
+          <LabelList dataKey="bugs" position="top" fill="var(--text2)" fontSize={10} fontWeight={600} />
+        </Bar>
+        <Bar dataKey="enh" name="Enhancements" fill={CHART.enh} radius={[4, 4, 0, 0]} maxBarSize={28}>
+          <LabelList dataKey="enh" position="top" fill="var(--text2)" fontSize={10} fontWeight={600} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function WorkloadChart({ data }: { data: { name: string; count: number }[] }) {
+  const h = Math.max(120, data.length * 28);
+  return (
+    <ResponsiveContainer width="100%" height={h}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 30, left: 8, bottom: 4 }}>
+        <XAxis type="number" hide allowDecimals={false} />
+        <YAxis type="category" dataKey="name" width={78}
+          tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--accent-dim)' }} />
+        <Bar dataKey="count" name="Tickets" radius={[0, 4, 4, 0]} maxBarSize={16}>
+          {data.map((_, i) => <Cell key={i} fill={i === 0 ? 'var(--accent)' : 'var(--accent-dark)'} />)}
+          <LabelList dataKey="count" position="right" fill="var(--text)" fontSize={11} fontWeight={600} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 /* ── Main ── */
 
 export default function Overview() {
@@ -541,6 +689,34 @@ export default function Overview() {
 
   const [tasks, setTasks]               = useState<Task[]>([]);
   const [backlogProduct, setBacklogProduct] = useState<string | null>(null);
+
+  const [bugEnh, setBugEnh] = useState<Map<string, BugEnh>>(new Map());
+  const [trend, setTrend]   = useState<TrendPoint[]>([]);
+  const [trendProduct, setTrendProduct] = useState<string | null>(null); // null = all products
+  const [presenting, setPresenting] = useState(false);
+  const [presentTheme, setPresentTheme] = useState<'light' | 'dark'>('light');
+
+  const pageRef     = useRef<HTMLDivElement>(null);
+  const teamRef     = useRef<HTMLDivElement>(null);
+  const productsRef = useRef<HTMLDivElement>(null);
+  const backlogRef  = useRef<HTMLDivElement>(null);
+
+  function jumpTo(ref: React.RefObject<HTMLDivElement>) {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function togglePresent() {
+    const el = pageRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) el.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }
+
+  useEffect(() => {
+    const onFs = () => setPresenting(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
 
   // Base data: products, members, standup last dates, tasks
   useEffect(() => {
@@ -583,11 +759,12 @@ export default function Overview() {
 
     supabase
       .from('ticket_imports')
-      .select('product_id, status, primary_member_id')
+      .select('product_id, status, primary_member_id, is_bug, is_enhancement')
       .eq('imported_month', selectedMonth + '-01')
       .then(({ data: tix }) => {
         const stats = new Map<string, ProductStats>();
         const memberCounts = new Map<string, number>();
+        const be = new Map<string, BugEnh>();
 
         for (const row of (tix ?? []) as TicketRow[]) {
           if (!stats.has(row.product_id)) {
@@ -606,6 +783,11 @@ export default function Overview() {
           else if (row.status === 'REOPEN')      s.reopen++;
           else if (row.status === 'NO_ACTION')   s.no_action++;
 
+          if (!be.has(row.product_id)) be.set(row.product_id, { bugs: 0, enh: 0 });
+          const b = be.get(row.product_id)!;
+          if (row.is_bug) b.bugs++;
+          if (row.is_enhancement) b.enh++;
+
           if (row.primary_member_id) {
             memberCounts.set(
               row.primary_member_id,
@@ -616,9 +798,43 @@ export default function Overview() {
 
         setProductStats(stats);
         setMemberTicketCounts(memberCounts);
+        setBugEnh(be);
         setStatsLoading(false);
       });
   }, [selectedMonth]);
+
+  // 6-month created-ticket trend (one line per product) ending at the selected month
+  useEffect(() => {
+    if (products.length === 0) return;
+    const codeById = new Map(products.map(p => [p.id, p.code]));
+    const pts: TrendPoint[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const ym = shiftMonth(selectedMonth, -i);
+      const [y, mo] = ym.split('-').map(Number);
+      const base: TrendPoint = {
+        month: ym,
+        label: new Date(y, mo - 1, 1).toLocaleDateString('en-MY', { month: 'short' }),
+      };
+      for (const p of products) base[p.code] = 0;
+      pts.push(base);
+    }
+    const idx = new Map(pts.map((p, i) => [p.month, i]));
+    supabase
+      .from('ticket_imports')
+      .select('imported_month, product_id')
+      .gte('imported_month', pts[0].month + '-01')
+      .lte('imported_month', pts[pts.length - 1].month + '-01')
+      .then(({ data }) => {
+        const next = pts.map(p => ({ ...p }));
+        for (const r of (data ?? []) as { imported_month: string; product_id: string }[]) {
+          const i = idx.get(String(r.imported_month).slice(0, 7));
+          const code = codeById.get(r.product_id);
+          if (i === undefined || !code) continue;
+          next[i][code] = (Number(next[i][code]) || 0) + 1;
+        }
+        setTrend(next);
+      });
+  }, [selectedMonth, products]);
 
   // Fetch full ticket detail when a product is selected
   useEffect(() => {
@@ -648,6 +864,40 @@ export default function Overview() {
     return { active, deployed };
   }, [productStats]);
 
+  const statusTotals = useMemo(() => {
+    const t = { open: 0, in_progress: 0, qc: 0, to_deploy: 0, deployed: 0, reopen: 0, no_action: 0, total: 0 };
+    for (const s of productStats.values()) {
+      t.open += s.open; t.in_progress += s.in_progress; t.qc += s.qc;
+      t.to_deploy += s.to_deploy; t.deployed += s.deployed;
+      t.reopen += s.reopen; t.no_action += s.no_action; t.total += s.total;
+    }
+    return t;
+  }, [productStats]);
+
+  const statusDonutData = useMemo(() => ([
+    { name: 'Open',        value: statusTotals.open,        color: CHART.open },
+    { name: 'In Progress', value: statusTotals.in_progress, color: CHART.inProgress },
+    { name: 'QC',          value: statusTotals.qc,          color: CHART.qc },
+    { name: 'To Deploy',   value: statusTotals.to_deploy,   color: CHART.toDeploy },
+    { name: 'Deployed',    value: statusTotals.deployed,    color: CHART.deployed },
+    { name: 'Reopen',      value: statusTotals.reopen,      color: CHART.reopen },
+    { name: 'No Action',   value: statusTotals.no_action,   color: CHART.noAction },
+  ].filter(d => d.value > 0)), [statusTotals]);
+
+  const bugEnhData = useMemo(() => products
+    .map(p => ({ product: p.code, bugs: bugEnh.get(p.id)?.bugs ?? 0, enh: bugEnh.get(p.id)?.enh ?? 0 }))
+    .filter(d => d.bugs > 0 || d.enh > 0), [products, bugEnh]);
+
+  const workloadData = useMemo(() => members
+    .map(m => ({ name: m.name.split(' ')[0], count: memberTicketCounts.get(m.id) ?? 0 }))
+    .filter(d => d.count > 0)
+    .sort((a, b) => b.count - a.count), [members, memberTicketCounts]);
+
+  const trendSeries = useMemo<TrendSeries[]>(
+    () => products.map((p, i) => ({ key: p.code, color: PRODUCT_COLORS[i % PRODUCT_COLORS.length] })),
+    [products]
+  );
+
   const filteredTasks = useMemo(() => {
     if (!backlogProduct) return tasks;
     return tasks.filter(t => t.product_id === backlogProduct);
@@ -668,7 +918,11 @@ export default function Overview() {
   }
 
   return (
-    <div style={pageStyle}>
+    <div
+      style={pageStyle}
+      ref={pageRef}
+      className={presenting ? `dp-presenting dp-theme-${presentTheme}` : undefined}
+    >
 
       {/* Header */}
       <div style={{
@@ -719,6 +973,34 @@ export default function Overview() {
           >
             <ChevronRight size={14} />
           </button>
+          {presenting && (
+            <button
+              onClick={() => setPresentTheme(t => (t === 'light' ? 'dark' : 'light'))}
+              title="Toggle presentation theme"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4,
+                background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8,
+                padding: '8px 12px', cursor: 'pointer', color: 'var(--text2)',
+                fontWeight: 600, fontSize: 12,
+              }}
+            >
+              {presentTheme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+              {presentTheme === 'light' ? 'Dark' : 'Light'}
+            </button>
+          )}
+          <button
+            onClick={togglePresent}
+            title="Presentation mode (fullscreen)"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4,
+              background: 'linear-gradient(90deg, var(--accent-dark), var(--accent))',
+              border: 'none', borderRadius: 8, padding: '8px 12px',
+              cursor: 'pointer', color: '#fff', fontWeight: 600, fontSize: 12,
+            }}
+          >
+            {presenting ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {presenting ? 'Exit' : 'Present'}
+          </button>
         </div>
       </div>
 
@@ -742,10 +1024,41 @@ export default function Overview() {
           value={totals.deployed}
           color="var(--green)"
         />
+        <KpiPill
+          icon={<Plus size={18} />}
+          label={`New · ${fmtMonth(selectedMonth)}`}
+          value={statusTotals.total}
+          color="var(--accent)"
+        />
       </div>
 
-      {/* Active Members */}
-      <Section title={`Active Members · ${members.length}`}>
+      {/* Sticky section nav */}
+      <div className="dp-section-nav">
+        <span style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: '0.12em', fontWeight: 600 }}>
+          JUMP TO
+        </span>
+        {([
+          { label: 'Team', ref: teamRef },
+          { label: 'Products', ref: productsRef },
+          { label: 'Backlog', ref: backlogRef },
+        ] as const).map(({ label, ref }) => (
+          <button
+            key={label}
+            onClick={() => jumpTo(ref)}
+            style={{
+              fontSize: 12, fontWeight: 500, padding: '5px 12px', borderRadius: 99,
+              cursor: 'pointer', background: 'var(--bg2)', color: 'var(--text2)',
+              border: '1px solid var(--border2)',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Team ── */}
+      <div ref={teamRef}>
+      <Section title={`Team · ${members.length} members`}>
         {(() => {
           const maxTickets = Math.max(1, ...members.map(m => memberTicketCounts.get(m.id) ?? 0));
           return (
@@ -762,6 +1075,144 @@ export default function Overview() {
             </div>
           );
         })()}
+      </Section>
+      </div>
+
+      {/* ── Products ── */}
+      <div ref={productsRef} style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+
+      {/* Analytics charts */}
+      <Section title={`Analytics · ${fmtMonth(selectedMonth)}`}>
+        {statsLoading ? (
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>Loading…</div>
+        ) : statusTotals.total === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>
+            No ticket data for {fmtMonth(selectedMonth)}.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <ChartCard
+              title="Tickets created · 6-month trend"
+              action={
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[{ code: null as string | null, label: 'All' },
+                    ...products.map(p => ({ code: p.code, label: p.code }))].map(opt => {
+                    const on = trendProduct === opt.code;
+                    return (
+                      <button
+                        key={opt.label}
+                        onClick={() => setTrendProduct(opt.code)}
+                        style={{
+                          fontSize: 11, fontWeight: 600, padding: '3px 11px', borderRadius: 99,
+                          cursor: 'pointer', transition: 'all 0.12s',
+                          background: on ? 'var(--accent)' : 'var(--bg3)',
+                          color: on ? '#fff' : 'var(--text2)',
+                          border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              }
+            >
+              <TrendChart
+                data={trend}
+                series={trendProduct ? trendSeries.filter(s => s.key === trendProduct) : trendSeries}
+              />
+            </ChartCard>
+
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+              <ChartCard title="Status distribution">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <StatusDonut data={statusDonutData} total={statusTotals.total} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11.5, flex: 1 }}>
+                    {statusDonutData.map(d => (
+                      <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <StatusDot color={d.color} />
+                        <span style={{ color: 'var(--text2)', flex: 1 }}>{d.name}</span>
+                        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{d.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </ChartCard>
+
+              <ChartCard
+                title="Bugs vs enhancements"
+                action={
+                  <span style={{ fontSize: 10 }}>
+                    <span style={{ color: 'var(--red)' }}>● bug</span>{' '}
+                    <span style={{ color: 'var(--blue)', marginLeft: 6 }}>● enh</span>
+                  </span>
+                }
+              >
+                {bugEnhData.length > 0
+                  ? <BugsEnhChart data={bugEnhData} />
+                  : <div style={{ fontSize: 12, color: 'var(--text3)', padding: '40px 0', textAlign: 'center' }}>No data</div>}
+              </ChartCard>
+            </div>
+
+            <ChartCard
+              title="Workload by member"
+              action={<span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>tickets</span>}
+            >
+              {workloadData.length > 0
+                ? <WorkloadChart data={workloadData} />
+                : <div style={{ fontSize: 12, color: 'var(--text3)', padding: '24px 0', textAlign: 'center' }}>No assigned tickets this month</div>}
+            </ChartCard>
+          </div>
+        )}
+      </Section>
+
+      {/* Ticket summary table */}
+      <Section title="Ticket Summary · by product">
+        {statsLoading ? (
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>Loading…</div>
+        ) : (
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: 'var(--text)' }}>
+                <thead>
+                  <tr>
+                    {['Product', 'Open', 'In Prog', 'QC', 'To Deploy', 'Deployed', 'Reopen', 'No Action', 'Total'].map((h, i) => (
+                      <th key={h} style={{
+                        padding: '10px 14px', textAlign: i === 0 ? 'left' : 'right',
+                        fontWeight: 600, fontSize: 11, color: 'var(--text2)',
+                        borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map(p => {
+                    const s = productStats.get(p.id);
+                    const cells = s
+                      ? [s.open, s.in_progress, s.qc, s.to_deploy, s.deployed, s.reopen, s.no_action]
+                      : [0, 0, 0, 0, 0, 0, 0];
+                    return (
+                      <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '9px 14px', fontWeight: 600 }}>{p.name}</td>
+                        {cells.map((c, i) => (
+                          <td key={i} style={{ padding: '9px 14px', textAlign: 'right', color: c === 0 ? 'var(--text3)' : 'var(--text)' }}>{c}</td>
+                        ))}
+                        <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>{s?.total ?? 0}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr>
+                    <td style={{ padding: '9px 14px', fontWeight: 600, color: 'var(--text2)' }}>Total</td>
+                    {[statusTotals.open, statusTotals.in_progress, statusTotals.qc, statusTotals.to_deploy, statusTotals.deployed, statusTotals.reopen, statusTotals.no_action].map((c, i) => (
+                      <td key={i} style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 600 }}>{c}</td>
+                    ))}
+                    <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>{statusTotals.total}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
       </Section>
 
       {/* Product snapshot + inline detail panel */}
@@ -875,8 +1326,10 @@ export default function Overview() {
           </div>
         )}
       </Section>
+      </div>
 
-      {/* Backlog / Upcoming Features */}
+      {/* ── Backlog ── */}
+      <div ref={backlogRef}>
       <Section
         title="Backlog · Upcoming Features"
         action={
@@ -994,6 +1447,7 @@ export default function Overview() {
           )}
         </Card>
       </Section>
+      </div>
 
     </div>
   );
