@@ -13,7 +13,7 @@ import postgres from 'https://deno.land/x/postgresjs@v3.4.5/mod.js';
  *          Change the right-hand strings only.
  * COL.productCode must resolve to a value that matches products.code.
  * ════════════════════════════════════════════════════════════════════════ */
-const VIEW = 'issue.view_issues_v1';
+const VIEW = 'issue.view_issues_v2';
 
 // Source view uses camelCase quoted identifiers; SELECT * preserves the case,
 // so row keys are e.g. row["issueNo"]. productName (enum) equals products.code
