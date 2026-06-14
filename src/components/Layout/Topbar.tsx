@@ -91,7 +91,7 @@ export default function Topbar({ title, badge, isMobile, alertCount, onOpenAlert
               height: 8,
               borderRadius: '50%',
               background: 'var(--red)',
-              border: '1.5px solid var(--bg2)',
+              border: '1.5px solid var(--bg2-solid)',
             }} />
           )}
         </button>

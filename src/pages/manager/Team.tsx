@@ -131,7 +131,7 @@ function AddMemberModal({ onClose, onSaved }: AddMemberModalProps) {
                     width: 28, height: 28, borderRadius: '50%',
                     background: c + '33', border: `2px solid ${c === color ? c : 'transparent'}`,
                     cursor: 'pointer', padding: 0,
-                    boxShadow: c === color ? `0 0 0 2px var(--bg2), 0 0 0 4px ${c}` : 'none',
+                    boxShadow: c === color ? `0 0 0 2px var(--bg2-solid), 0 0 0 4px ${c}` : 'none',
                     transition: 'box-shadow 0.15s',
                   }}
                 />
@@ -240,7 +240,7 @@ function EditMemberModal({ member, onClose, onSaved }: EditMemberModalProps) {
                     width: 28, height: 28, borderRadius: '50%',
                     background: c + '33', border: `2px solid ${c === color ? c : 'transparent'}`,
                     cursor: 'pointer', padding: 0,
-                    boxShadow: c === color ? `0 0 0 2px var(--bg2), 0 0 0 4px ${c}` : 'none',
+                    boxShadow: c === color ? `0 0 0 2px var(--bg2-solid), 0 0 0 4px ${c}` : 'none',
                     transition: 'box-shadow 0.15s',
                   }}
                 />

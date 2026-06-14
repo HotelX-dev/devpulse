@@ -7,7 +7,7 @@ interface MetricCardProps {
 
 export default function MetricCard({ label, value, color = 'var(--accent)', sub }: MetricCardProps) {
   return (
-    <div style={{
+    <div className="dp-elev" style={{
       background: 'var(--bg2)',
       border: '1px solid var(--border)',
       borderRadius: 12,

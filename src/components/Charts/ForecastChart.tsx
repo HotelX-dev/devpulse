@@ -142,7 +142,7 @@ export default function ForecastChart({ data, currentActive }: ForecastChartProp
           <circle key={i}
             cx={xOf(i)} cy={yOf(p.expected)}
             r={i === 0 ? 4 : 3}
-            fill={i === 0 ? 'var(--accent)' : 'var(--bg2)'}
+            fill={i === 0 ? 'var(--accent)' : 'var(--bg2-solid)'}
             stroke="var(--accent)" strokeWidth={i === 0 ? 0 : 1.5}
           />
         ))}

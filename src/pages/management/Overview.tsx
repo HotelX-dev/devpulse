@@ -182,7 +182,7 @@ function Section({ title, children, action }: {
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{
+    <div className="dp-elev" style={{
       background: 'var(--bg2)', border: '1px solid var(--border)',
       borderRadius: 12, padding: 20, ...style,
     }}>
@@ -195,7 +195,7 @@ function KpiPill({ icon, label, value, color }: {
   icon: React.ReactNode; label: string; value: number | string; color?: string;
 }) {
   return (
-    <div style={{
+    <div className="dp-elev" style={{
       display: 'flex', alignItems: 'center', gap: 12,
       background: 'var(--bg2)', border: '1px solid var(--border)',
       borderRadius: 12, padding: '14px 18px', flex: 1, minWidth: 140,
@@ -309,6 +309,7 @@ function MemberCard({
 
   return (
     <div
+      className="dp-elev"
       onClick={clickable ? onClick : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -338,7 +339,7 @@ function MemberCard({
             position: 'absolute', bottom: 0, right: 0,
             width: 9, height: 9, borderRadius: '50%',
             background: standupColor,
-            border: '2px solid var(--bg2)',
+            border: '2px solid var(--bg2-solid)',
           }} title={`Standup: ${standupLabel}`} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -1414,13 +1415,13 @@ export default function Overview() {
                 return (
                   <div
                     key={p.id}
+                    className={isSelected ? 'dp-elev-active' : 'dp-elev'}
                     onClick={() => setSelectedProductId(prev => prev === p.id ? null : p.id)}
                     style={{
                       background: 'var(--bg2)',
                       border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
                       borderRadius: 12, padding: 16, cursor: 'pointer',
                       transition: 'border-color 0.15s, box-shadow 0.15s',
-                      boxShadow: isSelected ? '0 0 0 3px var(--accent-dim)' : 'none',
                     }}
                   >
                     <div style={{

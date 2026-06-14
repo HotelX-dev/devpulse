@@ -15,12 +15,15 @@
   to   { transform: rotate(360deg); }
 }
 
-/* ── Dark mode (default) ── */
+/* ── Dark mode (default) — Dark Mode 2.0: OLED base, layered gradient surfaces ── */
 :root {
-  --bg:           #16161D;
-  --bg2:          #1E1E27;
-  --bg3:          #272730;
-  --bg4:          #332F47;
+  --bg:           #0C0C11;
+  --bg2:          linear-gradient(165deg, #1C1C28 0%, #141420 100%);
+  --bg2-solid:    #1A1A23;
+  --bg3:          #24242F;
+  --bg4:          #322E46;
+  --elev-shadow:  0 12px 30px -16px rgba(0, 0, 0, 0.75);
+  --elev-edge:    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --accent:       #A78BFA;
   --accent-dim:   rgba(167, 139, 250, 0.12);
   --accent-dark:  #7C5CDB;
@@ -51,9 +54,12 @@
 /* ── Light mode overrides ── */
 :root.light {
   --bg:           #FFFFFF;
-  --bg2:          #F4F3FA;
+  --bg2:          linear-gradient(165deg, #FFFFFF 0%, #F3F1FA 100%);
+  --bg2-solid:    #F6F5FB;
   --bg3:          #ECEAF5;
   --bg4:          #E2DFF2;
+  --elev-shadow:  0 10px 26px -16px rgba(80, 70, 120, 0.20);
+  --elev-edge:    inset 0 1px 0 rgba(255, 255, 255, 0.85);
   --accent:       #7C5CDB;
   --accent-dim:   rgba(124, 92, 219, 0.10);
   --accent-dark:  #5E40C0;
@@ -98,6 +104,7 @@ body {
 .dp-card-accent {
   position: relative;
   overflow: hidden;
+  box-shadow: var(--elev-edge), var(--elev-shadow);
 }
 .dp-card-accent::before {
   content: "";
@@ -106,6 +113,18 @@ body {
   height: 2px;
   background: linear-gradient(90deg, var(--accent), var(--pink) 60%, transparent);
   opacity: 0.85;
+}
+
+/* Dark Mode 2.0 elevation — glassy top edge + depth shadow. Apply alongside a
+   card's existing inline background/border/radius (those win; this adds shadow). */
+.dp-elev {
+  box-shadow: var(--elev-edge), var(--elev-shadow);
+}
+/* Active/selected card — accent halo on top of the elevation */
+.dp-elev-active {
+  box-shadow: var(--elev-edge), 0 0 0 1px var(--accent-dim),
+              0 16px 38px -14px rgba(124, 92, 219, 0.45);
+  border-color: rgba(167, 139, 250, 0.40) !important;
 }
 
 /* Sticky section nav for the meeting overview */
@@ -138,14 +157,20 @@ body {
    you can present in light even while the app runs dark. Light palette uses
    deeper, lower-neon accents that read well on a projector / for older eyes. */
 .dp-theme-dark {
-  --bg: #16161D; --bg2: #1E1E27; --bg3: #272730; --bg4: #332F47;
+  --bg: #0C0C11;
+  --bg2: linear-gradient(165deg, #1C1C28 0%, #141420 100%); --bg2-solid: #1A1A23;
+  --bg3: #24242F; --bg4: #322E46;
+  --elev-shadow: 0 12px 30px -16px rgba(0,0,0,0.75); --elev-edge: inset 0 1px 0 rgba(255,255,255,0.05);
   --accent: #A78BFA; --accent-dim: rgba(167,139,250,0.14); --accent-dark: #7C5CDB;
   --pink: #F472B6; --green: #34D399; --amber: #FBBF24; --red: #F87171; --blue: #60A5FA; --purple: #8B5CF6;
   --text: #E8E5F4; --text2: #AEA9CA; --text3: #75708F;
   --border: rgba(167,139,250,0.12); --border2: rgba(167,139,250,0.20);
 }
 .dp-theme-light {
-  --bg: #FFFFFF; --bg2: #F6F5FB; --bg3: #ECEAF5; --bg4: #E2DFF2;
+  --bg: #FFFFFF;
+  --bg2: linear-gradient(165deg, #FFFFFF 0%, #F3F1FA 100%); --bg2-solid: #F6F5FB;
+  --bg3: #ECEAF5; --bg4: #E2DFF2;
+  --elev-shadow: 0 10px 26px -16px rgba(80,70,120,0.20); --elev-edge: inset 0 1px 0 rgba(255,255,255,0.85);
   --accent: #6D52C8; --accent-dim: rgba(109,82,200,0.10); --accent-dark: #5A3FB0;
   --pink: #C9437F; --green: #1E9E6A; --amber: #C07712; --red: #D64545; --blue: #2D74C4; --purple: #7A52C8;
   --text: #181528; --text2: #555070; --text3: #847FA0;
