@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Edit2, Plus, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Edit2, Plus, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
@@ -273,11 +273,20 @@ interface LogEntry {
   ticket_ref: string | null;
 }
 
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split('T')[0];
+}
+
 /* ── Main component ── */
 export default function MemberStandup() {
   const { member } = useAuth();
   const today = localToday();
   const pageStyle = usePageShellStyle({ maxWidth: 760, gap: 24 });
+
+  const [selectedDate, setSelectedDate] = useState(today);
+  const isToday = selectedDate === today;
 
   const [products, setProducts] = useState<Product[]>([]);
   const [existing, setExisting] = useState<LogEntry | null>(null);
@@ -299,30 +308,46 @@ export default function MemberStandup() {
     setBlockers(log.blockers ?? '');
   }
 
+  function resetForm() {
+    setYesterday([emptyTask()]);
+    setToday([emptyTask()]);
+    setBlockers('');
+    setExisting(null);
+    setEditing(false);
+    setSaved(false);
+    setError('');
+  }
+
+  // Load products once
+  useEffect(() => {
+    supabase.from('products').select('*').then(({ data: prods }) => {
+      const sorted = (prods ?? []).sort((a, b) => CODE_ORDER.indexOf(a.code) - CODE_ORDER.indexOf(b.code));
+      setProducts(sorted);
+    });
+  }, []);
+
+  // Reload standup log + history when date or member changes
   useEffect(() => {
     if (!member) return;
+    setLoading(true);
+    resetForm();
     Promise.all([
-      supabase.from('products').select('*'),
       supabase.from('standup_logs')
         .select('id, product_id, date, yesterday, today, blockers, ticket_ref')
-        .eq('member_id', member.id).eq('date', today).maybeSingle(),
+        .eq('member_id', member.id).eq('date', selectedDate).maybeSingle(),
       supabase.from('standup_logs')
         .select('id, product_id, date, yesterday, today, blockers, ticket_ref')
         .eq('member_id', member.id)
         .order('date', { ascending: false }).limit(11),
-    ]).then(([{ data: prods }, { data: todayLog }, { data: hist }]) => {
-      const sorted = (prods ?? []).sort((a, b) => CODE_ORDER.indexOf(a.code) - CODE_ORDER.indexOf(b.code));
-      setProducts(sorted);
-
-      if (todayLog) {
-        setExisting(todayLog);
-        fillForm(todayLog);
+    ]).then(([{ data: log }, { data: hist }]) => {
+      if (log) {
+        setExisting(log);
+        fillForm(log);
       }
-
-      setHistory((hist ?? []).filter(h => h.date !== today).slice(0, 7));
+      setHistory((hist ?? []).filter(h => h.date !== selectedDate).slice(0, 7));
       setLoading(false);
     });
-  }, [member]);
+  }, [member, selectedDate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -347,7 +372,7 @@ export default function MemberStandup() {
     const { error: err } = await supabase.from('standup_logs').upsert({
       member_id:  member.id,
       product_id: derivedProductId,
-      date:       today,
+      date:       selectedDate,
       task_type:  primaryType,
       yesterday:  serializeTasks(yesterdayTasks),
       today:      todaySerialized,
@@ -358,24 +383,26 @@ export default function MemberStandup() {
     setSaving(false);
     if (err) { setError(err.message); return; }
 
-    // Fire-and-forget Discord notification (non-blocking)
-    const productCode = products.find(p => p.id === derivedProductId)?.code ?? null;
-    supabase.functions.invoke('notify-discord', {
-      body: {
-        member_name: member.name,
-        product_code: productCode,
-        date:         today,
-        task_type:    primaryType,
-        today:        todaySerialized,
-        yesterday:    serializeTasks(yesterdayTasks),
-        blockers:     blockers.trim() || null,
-      },
-    }).catch(() => {/* ignore notification errors */});
+    // Only send Discord notification for same-day submissions
+    if (isToday) {
+      const productCode = products.find(p => p.id === derivedProductId)?.code ?? null;
+      supabase.functions.invoke('notify-discord', {
+        body: {
+          member_name: member.name,
+          product_code: productCode,
+          date:         selectedDate,
+          task_type:    primaryType,
+          today:        todaySerialized,
+          yesterday:    serializeTasks(yesterdayTasks),
+          blockers:     blockers.trim() || null,
+        },
+      }).catch(() => {/* ignore notification errors */});
+    }
 
     const updated: LogEntry = {
       id: existing?.id ?? '',
       product_id: derivedProductId,
-      date: today,
+      date: selectedDate,
       yesterday: serializeTasks(yesterdayTasks),
       today: todaySerialized,
       blockers: blockers.trim() || null,
@@ -395,13 +422,39 @@ export default function MemberStandup() {
     <div style={pageStyle}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Daily Standup</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 2 }}>
-            {new Date(today + 'T00:00:00').toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        {/* Date navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setSelectedDate(d => addDays(d, -1))} style={{
+            background: 'none', border: '1px solid var(--border2)', borderRadius: 6,
+            padding: '6px 9px', cursor: 'pointer', color: 'var(--text2)', display: 'flex',
+          }}>
+            <ChevronLeft size={15} />
+          </button>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
+              {isToday ? 'Today' : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+              {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
           </div>
+          <button onClick={() => setSelectedDate(d => addDays(d, 1))} disabled={isToday} style={{
+            background: 'none', border: '1px solid var(--border2)', borderRadius: 6,
+            padding: '6px 9px', cursor: isToday ? 'not-allowed' : 'pointer',
+            color: 'var(--text2)', display: 'flex', opacity: isToday ? 0.35 : 1,
+          }}>
+            <ChevronRight size={15} />
+          </button>
+          {!isToday && (
+            <button onClick={() => setSelectedDate(today)} style={{
+              padding: '5px 12px', borderRadius: 99, border: '1px solid var(--border2)',
+              background: 'transparent', color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}>Today</button>
+          )}
         </div>
+
         {existing && !editing && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
@@ -423,13 +476,24 @@ export default function MemberStandup() {
         )}
       </div>
 
+      {/* Back-date notice */}
+      {!isToday && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 8,
+          border: '1px solid var(--accent)33', background: 'var(--accent-dim)',
+          fontSize: 12, color: 'var(--text2)',
+        }}>
+          Submitting standup for a past date — this will appear in the team standup log for that day.
+        </div>
+      )}
+
       {saved && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
           borderRadius: 8, background: 'var(--green-dim)', border: '1px solid var(--green)33',
           fontSize: 13, color: 'var(--green)', fontWeight: 500,
         }}>
-          <Check size={14} /> Standup {existing ? 'updated' : 'submitted'} — have a productive day!
+          <Check size={14} /> Standup {existing ? 'updated' : 'submitted'}{isToday ? ' — have a productive day!' : ` for ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}.`}
         </div>
       )}
 
