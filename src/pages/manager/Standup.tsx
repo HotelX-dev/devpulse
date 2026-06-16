@@ -165,9 +165,11 @@ export default function ManagerStandup() {
   const standupMap = new Map<string, StandupRow>(standups.map(s => [s.member_id, s]));
   const leaveSet   = new Set<string>(leaves.map(l => l.member_id));
 
+  const isWeekend = (() => { const dow = new Date(date + 'T00:00:00').getDay(); return dow === 0 || dow === 6; })();
+
   const submitted = members.filter(m => standupMap.has(m.id)).length;
   const onLeave   = members.filter(m => leaveSet.has(m.id) && !standupMap.has(m.id)).length;
-  const missing   = members.length - submitted - onLeave;
+  const missing   = isWeekend ? 0 : members.length - submitted - onLeave;
 
   // Count task types across all today fields for the day
   const typeCounts = (() => {
@@ -237,10 +239,23 @@ export default function ManagerStandup() {
         {/* Summary chips */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <StatusChip label="submitted"  count={submitted} color="var(--green)"  icon={<CheckCircle size={14} />} />
-            <StatusChip label="missing"    count={missing}   color="var(--red)"    icon={<XCircle size={14} />} />
-            {onLeave > 0 && (
-              <StatusChip label="on leave" count={onLeave}   color="var(--amber)"  icon={<Plane size={14} />} />
+            {isWeekend ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 14px', borderRadius: 99,
+                background: 'var(--bg2)', border: '1px solid var(--border)',
+                fontSize: 13, color: 'var(--text3)',
+              }}>
+                Weekend — no standup
+              </div>
+            ) : (
+              <>
+                <StatusChip label="submitted"  count={submitted} color="var(--green)"  icon={<CheckCircle size={14} />} />
+                <StatusChip label="missing"    count={missing}   color="var(--red)"    icon={<XCircle size={14} />} />
+                {onLeave > 0 && (
+                  <StatusChip label="on leave" count={onLeave}   color="var(--amber)"  icon={<Plane size={14} />} />
+                )}
+              </>
             )}
           </div>
           {/* Task type breakdown */}
@@ -295,6 +310,15 @@ export default function ManagerStandup() {
       {/* ── Member list ── */}
       {loading ? (
         <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+      ) : isWeekend && submitted === 0 ? (
+        <div style={{
+          padding: '32px 20px', textAlign: 'center',
+          color: 'var(--text3)', fontSize: 13,
+          background: 'var(--bg2)', border: '1px solid var(--border)',
+          borderRadius: 10,
+        }}>
+          {new Date(date + 'T00:00:00').toLocaleDateString('en-MY', { weekday: 'long' })} — no standup expected.
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {members.map(member => {
