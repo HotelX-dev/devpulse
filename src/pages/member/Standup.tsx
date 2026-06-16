@@ -331,6 +331,7 @@ export default function MemberStandup() {
     if (!member) return;
     setLoading(true);
     resetForm();
+    const prevDate = addDays(selectedDate, -1);
     Promise.all([
       supabase.from('standup_logs')
         .select('id, product_id, date, yesterday, today, blockers, ticket_ref')
@@ -339,10 +340,19 @@ export default function MemberStandup() {
         .select('id, product_id, date, yesterday, today, blockers, ticket_ref')
         .eq('member_id', member.id)
         .order('date', { ascending: false }).limit(11),
-    ]).then(([{ data: log }, { data: hist }]) => {
+      supabase.from('standup_logs')
+        .select('today')
+        .eq('member_id', member.id).eq('date', prevDate).maybeSingle(),
+    ]).then(([{ data: log }, { data: hist }, { data: prevLog }]) => {
       if (log) {
         setExisting(log);
         fillForm(log);
+      } else if (prevLog?.today) {
+        // Pre-fill yesterday section from previous day's "today" tasks
+        const prevTasks = parseTasks(prevLog.today);
+        if (prevTasks.length > 0 && prevTasks[0].desc.trim()) {
+          setYesterday(prevTasks);
+        }
       }
       setHistory((hist ?? []).filter(h => h.date !== selectedDate).slice(0, 7));
       setLoading(false);
