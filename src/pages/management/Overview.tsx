@@ -266,13 +266,11 @@ const ROLE_COLOR: Record<string, string> = {
 function MemberCard({
   member,
   ticketCount,
-  maxTickets,
   lastStandup,
   onClick,
 }: {
   member: Member;
   ticketCount: number;
-  maxTickets: number;
   lastStandup: string | undefined;
   onClick?: () => void;
 }) {
@@ -297,15 +295,6 @@ function MemberCard({
     : standupDays < 7
     ? `${standupDays}d ago`
     : 'No recent';
-
-  const barPct = maxTickets > 0 ? Math.round((ticketCount / maxTickets) * 100) : 0;
-  const barColor = ticketCount === 0
-    ? 'var(--border2)'
-    : ticketCount >= maxTickets * 0.75
-    ? 'var(--red)'
-    : ticketCount >= maxTickets * 0.4
-    ? 'var(--amber)'
-    : 'var(--green)';
 
   return (
     <div
@@ -358,36 +347,6 @@ function MemberCard({
           }}>
             {member.role}
           </span>
-        </div>
-      </div>
-
-      {/* Workload bar */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tickets</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700,
-              color: ticketCount > 0 ? 'var(--text)' : 'var(--text3)',
-            }}>
-              {ticketCount}
-            </span>
-            {clickable && (
-              <span style={{
-                fontSize: 11, fontWeight: 700, lineHeight: 1,
-                color: hover ? 'var(--accent)' : 'var(--text3)',
-                transition: 'color 0.15s ease',
-              }}>›</span>
-            )}
-          </span>
-        </div>
-        <div style={{ height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', borderRadius: 99,
-            width: `${barPct}%`,
-            background: barColor,
-            transition: 'width 0.4s ease',
-          }} />
         </div>
       </div>
 
@@ -796,23 +755,6 @@ function BugsEnhChart({ data }: { data: { product: string; bugs: number; enh: nu
   );
 }
 
-function WorkloadChart({ data }: { data: { name: string; count: number }[] }) {
-  const h = Math.max(120, data.length * 28);
-  return (
-    <ResponsiveContainer width="100%" height={h}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 30, left: 8, bottom: 4 }}>
-        <XAxis type="number" hide allowDecimals={false} />
-        <YAxis type="category" dataKey="name" width={78}
-          tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--accent-dim)' }} />
-        <Bar dataKey="count" name="Tickets" radius={[0, 4, 4, 0]} maxBarSize={16}>
-          {data.map((_, i) => <Cell key={i} fill={i === 0 ? 'var(--accent)' : 'var(--accent-dark)'} />)}
-          <LabelList dataKey="count" position="right" fill="var(--text)" fontSize={11} fontWeight={600} />
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
 
 /* ── Main ── */
 
@@ -1051,11 +993,6 @@ export default function Overview() {
     .map(p => ({ product: p.code, bugs: bugEnh.get(p.id)?.bugs ?? 0, enh: bugEnh.get(p.id)?.enh ?? 0 }))
     .filter(d => d.bugs > 0 || d.enh > 0), [products, bugEnh]);
 
-  const workloadData = useMemo(() => members
-    .map(m => ({ name: m.name.split(' ')[0], count: memberTicketCounts.get(m.id) ?? 0 }))
-    .filter(d => d.count > 0)
-    .sort((a, b) => b.count - a.count), [members, memberTicketCounts]);
-
   const trendSeries = useMemo<TrendSeries[]>(
     () => products.map((p, i) => ({ key: p.code, color: PRODUCT_COLORS[i % PRODUCT_COLORS.length] })),
     [products]
@@ -1232,7 +1169,6 @@ export default function Overview() {
       <div ref={teamRef}>
       <Section title={`Team · ${members.length} members`}>
         {(() => {
-          const maxTickets = Math.max(1, ...members.map(m => memberTicketCounts.get(m.id) ?? 0));
           return (
             <div className="dp-member-grid">
               {members.map(m => (
@@ -1240,7 +1176,6 @@ export default function Overview() {
                   key={m.id}
                   member={m}
                   ticketCount={memberTicketCounts.get(m.id) ?? 0}
-                  maxTickets={maxTickets}
                   lastStandup={memberLastStandup.get(m.id)}
                   onClick={() => setSelectedMemberId(m.id)}
                 />
@@ -1335,14 +1270,6 @@ export default function Overview() {
               </ChartCard>
             </div>
 
-            <ChartCard
-              title="Workload by member"
-              action={<span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>tickets</span>}
-            >
-              {workloadData.length > 0
-                ? <WorkloadChart data={workloadData} />
-                : <div style={{ fontSize: 12, color: 'var(--text3)', padding: '24px 0', textAlign: 'center' }}>No assigned tickets this month</div>}
-            </ChartCard>
           </div>
         )}
       </Section>
