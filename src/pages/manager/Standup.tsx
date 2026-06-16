@@ -138,7 +138,7 @@ export default function ManagerStandup() {
   /* Load members + products once */
   useEffect(() => {
     Promise.all([
-      supabase.from('members').select('*').eq('active', true).in('role', ['owner', 'admin', 'member']).order('name'),
+      supabase.from('members').select('*').eq('active', true).in('role', ['admin', 'member']).order('name'),
       supabase.from('products').select('id, name'),
     ]).then(([{ data: mems }, { data: prods }]) => {
       setMembers(sortMembers(mems ?? []));
@@ -263,7 +263,7 @@ export default function ManagerStandup() {
         </div>
       </div>
 
-      {isToday && me && !loading && !leaveSet.has(me.id) && !standupMap.has(me.id) && (
+      {isToday && me && me.role !== 'owner' && !loading && !leaveSet.has(me.id) && !standupMap.has(me.id) && (
         <div style={{
           padding: '12px 14px',
           borderRadius: 10,
