@@ -134,17 +134,20 @@ export default function ManagerStandup() {
   const [products, setProducts]   = useState<ProductMap>({});
   const [loading, setLoading]     = useState(true);
   const [expanded, setExpanded]   = useState<Set<string>>(new Set());
+  const [holidays, setHolidays]   = useState<{ date: string; name: string }[]>([]);
 
-  /* Load members + products once */
+  /* Load members + products + holidays once */
   useEffect(() => {
     Promise.all([
       supabase.from('members').select('*').eq('active', true).in('role', ['admin', 'member']).order('name'),
       supabase.from('products').select('id, name'),
-    ]).then(([{ data: mems }, { data: prods }]) => {
+      supabase.from('app_settings').select('value').eq('key', 'public_holidays').maybeSingle(),
+    ]).then(([{ data: mems }, { data: prods }, { data: hols }]) => {
       setMembers(sortMembers(mems ?? []));
       const pm: ProductMap = {};
       (prods ?? []).forEach(p => { pm[p.id] = p.name; });
       setProducts(pm);
+      try { setHolidays(hols?.value ? JSON.parse(hols.value) : []); } catch { setHolidays([]); }
     });
   }, []);
 
@@ -165,11 +168,14 @@ export default function ManagerStandup() {
   const standupMap = new Map<string, StandupRow>(standups.map(s => [s.member_id, s]));
   const leaveSet   = new Set<string>(leaves.map(l => l.member_id));
 
-  const isWeekend = (() => { const dow = new Date(date + 'T00:00:00').getDay(); return dow === 0 || dow === 6; })();
+  const isWeekend  = (() => { const dow = new Date(date + 'T00:00:00').getDay(); return dow === 0 || dow === 6; })();
+  const holiday    = holidays.find(h => h.date === date) ?? null;
+  const isHoliday  = !!holiday;
+  const isOff      = isWeekend || isHoliday;
 
   const submitted = members.filter(m => standupMap.has(m.id)).length;
   const onLeave   = members.filter(m => leaveSet.has(m.id) && !standupMap.has(m.id)).length;
-  const missing   = isWeekend ? 0 : members.length - submitted - onLeave;
+  const missing   = isOff ? 0 : members.length - submitted - onLeave;
 
   // Count task types across all today fields for the day
   const typeCounts = (() => {
@@ -239,14 +245,14 @@ export default function ManagerStandup() {
         {/* Summary chips */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {isWeekend ? (
+            {isOff ? (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '6px 14px', borderRadius: 99,
                 background: 'var(--bg2)', border: '1px solid var(--border)',
                 fontSize: 13, color: 'var(--text3)',
               }}>
-                Weekend — no standup
+                {isHoliday ? `🗓 ${holiday!.name} — public holiday` : 'Weekend — no standup'}
               </div>
             ) : (
               <>
@@ -310,14 +316,16 @@ export default function ManagerStandup() {
       {/* ── Member list ── */}
       {loading ? (
         <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
-      ) : isWeekend && submitted === 0 ? (
+      ) : isOff && submitted === 0 ? (
         <div style={{
           padding: '32px 20px', textAlign: 'center',
           color: 'var(--text3)', fontSize: 13,
           background: 'var(--bg2)', border: '1px solid var(--border)',
           borderRadius: 10,
         }}>
-          {new Date(date + 'T00:00:00').toLocaleDateString('en-MY', { weekday: 'long' })} — no standup expected.
+          {isHoliday
+            ? `${holiday!.name} — public holiday, no standup expected.`
+            : `${new Date(date + 'T00:00:00').toLocaleDateString('en-MY', { weekday: 'long' })} — no standup expected.`}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
