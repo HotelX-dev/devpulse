@@ -767,15 +767,15 @@ function StatusDonut({ data, total }: {
 
 function BugsEnhChart({ data }: { data: { product: string; bugs: number; enh: number }[] }) {
   return (
-    <ResponsiveContainer width="100%" height={150}>
-      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }} barGap={4}>
+    <ResponsiveContainer width="100%" height={180}>
+      <BarChart data={data} margin={{ top: 18, right: 8, left: 0, bottom: 0 }} barGap={6} barCategoryGap="35%">
         <XAxis dataKey="product" tick={{ fontSize: 11, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11, fill: 'var(--text3)' }} axisLine={false} tickLine={false} width={34} allowDecimals={false} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--accent-dim)' }} />
-        <Bar dataKey="bugs" name="Bugs" fill={CHART.bug} radius={[4, 4, 0, 0]} maxBarSize={28}>
+        <Bar dataKey="bugs" name="Bugs" fill={CHART.bug} radius={[4, 4, 0, 0]} maxBarSize={32}>
           <LabelList dataKey="bugs" position="top" fill="var(--text2)" fontSize={10} fontWeight={600} />
         </Bar>
-        <Bar dataKey="enh" name="Enhancements" fill={CHART.enh} radius={[4, 4, 0, 0]} maxBarSize={28}>
+        <Bar dataKey="enh" name="Enhancements" fill={CHART.enh} radius={[4, 4, 0, 0]} maxBarSize={32}>
           <LabelList dataKey="enh" position="top" fill="var(--text2)" fontSize={10} fontWeight={600} />
         </Bar>
       </BarChart>
