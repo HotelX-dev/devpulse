@@ -1023,7 +1023,7 @@ export default function Overview() {
   const deliveryRate = statusTotals.total > 0
     ? Math.round(totals.deployed / statusTotals.total * 100) : 0;
   const healthColor = deliveryRate >= 70 ? 'var(--green)' : deliveryRate >= 40 ? 'var(--amber)' : 'var(--red)';
-  const health = deliveryRate >= 70 ? 'On Track' : deliveryRate >= 40 ? 'At Risk' : 'Behind';
+  const health = deliveryRate >= 70 ? 'Strong' : deliveryRate >= 40 ? 'Steady' : 'Slow';
 
   const momDisplay = (() => {
     if (statsLoading || prevDeployed === null) return '—';
