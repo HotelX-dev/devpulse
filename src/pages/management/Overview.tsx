@@ -1,7 +1,7 @@
 // Phase 11 — Management Overview (owner + admin)
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  TrendingUp, Users, Activity, ChevronLeft, ChevronRight, X,
+  TrendingUp, Users, Activity, X,
   Maximize2, Minimize2, Sun, Moon,
 } from 'lucide-react';
 import {
@@ -19,24 +19,75 @@ import type { Product, Member, TicketImport, Task } from '../../types';
 
 /* ── helpers ── */
 
-function prevMonth(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function fmtMonth(ym: string): string {
-  if (!ym) return '—';
-  const [y, m] = ym.split('-').map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString('en-MY', { month: 'long', year: 'numeric' });
-}
-
 function shiftMonth(ym: string, delta: number): string {
   const [y, m] = ym.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+
+/* ── date-range helpers (day-level filter) ── */
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Default range = the previous full calendar month (first → last day). */
+function defaultRange(): { from: string; to: string } {
+  const now = new Date();
+  return {
+    from: ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+    to:   ymd(new Date(now.getFullYear(), now.getMonth(), 0)), // day 0 = last day of prev month
+  };
+}
+
+function addDays(date: string, n: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return ymd(new Date(y, m - 1, d + n));
+}
+
+/** Half-open upper bound: the day AFTER `to`, so the whole `to` day is included. */
+function toExclusive(to: string): string {
+  return addDays(to, 1);
+}
+
+/** Inclusive day count between two YYYY-MM-DD dates. */
+function daysInclusive(from: string, to: string): number {
+  const a = new Date(from + 'T00:00:00');
+  const b = new Date(to + 'T00:00:00');
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
+}
+
+/** `created_ts` (timestamptz) bound at the UTC start of a YYYY-MM-DD day —
+ *  matches how `imported_month` is derived from `created_ts` at import time. */
+function utcDayStart(date: string): string {
+  return date + 'T00:00:00Z';
+}
+
+function fmtRange(from: string, to: string): string {
+  if (!from || !to) return '—';
+  const s = new Date(from + 'T00:00:00');
+  const e = new Date(to + 'T00:00:00');
+  if (from === to) {
+    return s.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+    return `${s.toLocaleDateString('en-MY', { day: 'numeric' })} – ${e.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  }
+  return `${s.toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
+const DATE_INPUT_STYLE = {
+  background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 7,
+  padding: '6px 9px', color: 'var(--text)', fontSize: 12, cursor: 'pointer',
+  colorScheme: 'light dark',
+} as const;
+
+const RANGE_PRESETS: { label: string; get: () => { from: string; to: string } }[] = [
+  { label: 'This mo', get: () => { const n = new Date(); return { from: ymd(new Date(n.getFullYear(), n.getMonth(), 1)), to: ymd(n) }; } },
+  { label: 'Last mo', get: defaultRange },
+  { label: '30d',     get: () => { const n = new Date(); return { from: addDays(ymd(n), -29), to: ymd(n) }; } },
+  { label: '90d',     get: () => { const n = new Date(); return { from: addDays(ymd(n), -89), to: ymd(n) }; } },
+];
 
 function daysSince(iso: string | null | undefined): number {
   if (!iso) return 999;
@@ -791,7 +842,7 @@ export default function Overview() {
   const isMobile = useIsMobile();
   const pageStyle = usePageShellStyle({ maxWidth: 1200, gap: 28 });
 
-  const [selectedMonth, setSelectedMonth] = useState(prevMonth);
+  const [range, setRange] = useState(defaultRange);
 
   const [products, setProducts]                   = useState<Product[]>([]);
   const [productStats, setProductStats]           = useState<Map<string, ProductStats>>(new Map());
@@ -882,7 +933,8 @@ export default function Overview() {
     supabase
       .from('ticket_imports')
       .select('product_id, status, primary_member_id, is_bug, is_enhancement, ticket_ref, priority')
-      .eq('imported_month', selectedMonth + '-01')
+      .gte('created_ts', utcDayStart(range.from))
+      .lt('created_ts', utcDayStart(toExclusive(range.to)))
       .then(({ data: tix }) => {
         const stats = new Map<string, ProductStats>();
         const memberCounts = new Map<string, number>();
@@ -935,27 +987,30 @@ export default function Overview() {
         setBugEnh(be);
         setStatsLoading(false);
       });
-  }, [selectedMonth]);
+  }, [range.from, range.to]);
 
-  // Previous month deployed count for MoM delta
+  // Deployed count for the preceding equal-length period (MoM delta)
   useEffect(() => {
     setPrevDeployed(null);
-    const prevYm = shiftMonth(selectedMonth, -1);
+    const len = daysInclusive(range.from, range.to);
+    const prevFrom = addDays(range.from, -len);
     supabase
       .from('ticket_imports')
       .select('status', { count: 'exact', head: true })
-      .eq('imported_month', prevYm + '-01')
+      .gte('created_ts', utcDayStart(prevFrom))
+      .lt('created_ts', utcDayStart(range.from))
       .eq('status', 'DEPLOYED')
       .then(({ count }) => setPrevDeployed(count ?? 0));
-  }, [selectedMonth]);
+  }, [range.from, range.to]);
 
-  // 6-month created-ticket trend (one line per product) ending at the selected month
+  // 6-month created-ticket trend (one line per product) ending at the range's end month
   useEffect(() => {
     if (products.length === 0) return;
+    const anchorMonth = range.to.slice(0, 7); // YYYY-MM of the range's end
     const codeById = new Map(products.map(p => [p.id, p.code]));
     const pts: TrendPoint[] = [];
     for (let i = 5; i >= 0; i--) {
-      const ym = shiftMonth(selectedMonth, -i);
+      const ym = shiftMonth(anchorMonth, -i);
       const [y, mo] = ym.split('-').map(Number);
       const base: TrendPoint = {
         month: ym,
@@ -980,7 +1035,7 @@ export default function Overview() {
         }
         setTrend(next);
       });
-  }, [selectedMonth, products]);
+  }, [range.to, products]);
 
   // Fetch full ticket detail when a product is selected
   useEffect(() => {
@@ -993,13 +1048,14 @@ export default function Overview() {
       .from('ticket_imports')
       .select('*')
       .eq('product_id', selectedProductId)
-      .eq('imported_month', selectedMonth + '-01')
+      .gte('created_ts', utcDayStart(range.from))
+      .lt('created_ts', utcDayStart(toExclusive(range.to)))
       .order('ticket_ref')
       .then(({ data }) => {
         setSelectedProductTickets((data ?? []) as TicketImport[]);
         setTicketsLoading(false);
       });
-  }, [selectedProductId, selectedMonth]);
+  }, [selectedProductId, range.from, range.to]);
 
   const totals = useMemo(() => {
     let active = 0, deployed = 0;
@@ -1071,11 +1127,6 @@ export default function Overview() {
     return tasks.filter(t => t.product_id === backlogProduct);
   }, [tasks, backlogProduct]);
 
-  const isCurrentMonth = selectedMonth === (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  })();
-
   const selectedProduct = useMemo(
     () => products.find(p => p.id === selectedProductId) ?? null,
     [products, selectedProductId]
@@ -1109,38 +1160,53 @@ export default function Overview() {
           </div>
         </div>
 
-        {/* Month nav */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            onClick={() => setSelectedMonth(m => shiftMonth(m, -1))}
-            style={{
-              background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 7,
-              padding: '7px 10px', cursor: 'pointer', color: 'var(--text2)', display: 'flex',
-            }}
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', minWidth: 130 }}>
-              {fmtMonth(selectedMonth)}
+        {/* Date-range filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="date"
+                value={range.from}
+                max={range.to}
+                onChange={e => {
+                  const from = e.target.value;
+                  if (!from) return;
+                  setRange(r => ({ from, to: from > r.to ? from : r.to }));
+                }}
+                style={DATE_INPUT_STYLE}
+              />
+              <span style={{ color: 'var(--text3)', fontSize: 13 }}>–</span>
+              <input
+                type="date"
+                value={range.to}
+                min={range.from}
+                onChange={e => {
+                  const to = e.target.value;
+                  if (!to) return;
+                  setRange(r => ({ from: to < r.from ? to : r.from, to }));
+                }}
+                style={DATE_INPUT_STYLE}
+              />
             </div>
-            {!isCurrentMonth && (
-              <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, marginTop: 1 }}>
-                Presentation month
-              </div>
-            )}
+            <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, textAlign: 'center' }}>
+              Presentation range · {fmtRange(range.from, range.to)}
+            </div>
           </div>
-          <button
-            onClick={() => setSelectedMonth(m => shiftMonth(m, +1))}
-            disabled={isCurrentMonth}
-            style={{
-              background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 7,
-              padding: '7px 10px', cursor: isCurrentMonth ? 'not-allowed' : 'pointer',
-              color: 'var(--text2)', display: 'flex', opacity: isCurrentMonth ? 0.3 : 1,
-            }}
-          >
-            <ChevronRight size={14} />
-          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {RANGE_PRESETS.map(p => (
+              <button
+                key={p.label}
+                onClick={() => setRange(p.get())}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: '5px 9px', borderRadius: 7,
+                  cursor: 'pointer', background: 'var(--bg2)',
+                  border: '1px solid var(--border2)', color: 'var(--text2)',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           {presenting && (
             <button
               onClick={() => setPresentTheme(t => (t === 'light' ? 'dark' : 'light'))}
@@ -1178,14 +1244,14 @@ export default function Overview() {
           icon={<TrendingUp size={20} />}
           label="Delivery Rate"
           value={statsLoading ? '—' : `${deliveryRate}%`}
-          sub={`${totals.deployed} of ${statusTotals.total} deployed · ${fmtMonth(selectedMonth)}`}
+          sub={`${totals.deployed} of ${statusTotals.total} deployed · ${fmtRange(range.from, range.to)}`}
           color={healthColor}
         />
         <KpiPrimary
           icon={<Activity size={20} />}
-          label={`vs ${fmtMonth(shiftMonth(selectedMonth, -1))}`}
+          label="vs previous period"
           value={momDisplay}
-          sub={prevDeployed !== null ? `${totals.deployed} deployed this month, ${prevDeployed} last month` : 'Loading…'}
+          sub={prevDeployed !== null ? `${totals.deployed} deployed this period, ${prevDeployed} prior period` : 'Loading…'}
           color={momColor}
         />
         <KpiPill
@@ -1251,12 +1317,12 @@ export default function Overview() {
       <div ref={productsRef} style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
 
       {/* Analytics charts */}
-      <Section title={`Analytics · ${fmtMonth(selectedMonth)}`}>
+      <Section title={`Analytics · ${fmtRange(range.from, range.to)}`}>
         {statsLoading ? (
           <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>Loading…</div>
         ) : statusTotals.total === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>
-            No ticket data for {fmtMonth(selectedMonth)}.
+            No ticket data for {fmtRange(range.from, range.to)}.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1385,7 +1451,7 @@ export default function Overview() {
       </Section>
 
       {/* Product snapshot + inline detail panel */}
-      <Section title={`Product Snapshot · ${fmtMonth(selectedMonth)}`}>
+      <Section title={`Product Snapshot · ${fmtRange(range.from, range.to)}`}>
         {statsLoading ? (
           <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>Loading…</div>
         ) : (
@@ -1468,7 +1534,7 @@ export default function Overview() {
                         fontSize: 12, color: 'var(--text3)',
                         textAlign: 'center', padding: '16px 0',
                       }}>
-                        No import data for {fmtMonth(selectedMonth)}
+                        No import data for {fmtRange(range.from, range.to)}
                       </div>
                     )}
 
@@ -1624,7 +1690,7 @@ export default function Overview() {
           member={memberMap.get(selectedMemberId)!}
           tickets={memberTickets.get(selectedMemberId) ?? []}
           productById={new Map(products.map(p => [p.id, p]))}
-          monthLabel={fmtMonth(selectedMonth)}
+          monthLabel={fmtRange(range.from, range.to)}
           onClose={() => setSelectedMemberId(null)}
         />
       )}
