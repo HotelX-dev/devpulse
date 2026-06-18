@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   TrendingUp, Users, Activity, X,
   Maximize2, Minimize2, Sun, Moon,
+  CheckCircle, Clock, AlertCircle,
 } from 'lucide-react';
 import {
   ResponsiveContainer, XAxis, YAxis, Tooltip,
@@ -367,13 +368,18 @@ function MemberCard({
     ? 'var(--amber-dim)'
     : 'var(--red-dim)';
   const roleColor = ROLE_COLOR[member.role] ?? 'var(--text3)';
-  const standupLabel = standupDays === 0
-    ? 'Today'
+  const standupText = standupDays === 0
+    ? 'Checked in today'
     : standupDays === 1
     ? 'Yesterday'
     : standupDays < 7
     ? `${standupDays}d ago`
-    : 'No recent';
+    : 'Not checked in';
+  const StandupIcon = standupDays === 0
+    ? CheckCircle
+    : standupDays >= 7
+    ? AlertCircle
+    : Clock;
 
   return (
     <div
@@ -408,7 +414,7 @@ function MemberCard({
             width: 9, height: 9, borderRadius: '50%',
             background: standupColor,
             border: '2px solid var(--bg2-solid)',
-          }} title={`Standup: ${standupLabel}`} />
+          }} title={standupText} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
@@ -436,9 +442,9 @@ function MemberCard({
         padding: '4px 9px', borderRadius: 99,
         background: standupDim,
       }}>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: standupColor, flexShrink: 0 }} />
+        <StandupIcon size={12} color={standupColor} style={{ flexShrink: 0 }} />
         <span style={{ fontSize: 10.5, color: standupColor, fontWeight: 600 }}>
-          {standupDays >= 7 ? 'No recent standup' : `Standup ${standupLabel.toLowerCase()}`}
+          {standupText}
         </span>
       </div>
     </div>
