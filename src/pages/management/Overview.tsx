@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   TrendingUp, Users, Activity, ChevronLeft, ChevronRight, X,
-  Maximize2, Minimize2, Plus, Sun, Moon,
+  Maximize2, Minimize2, Sun, Moon,
 } from 'lucide-react';
 import {
   ResponsiveContainer, XAxis, YAxis, Tooltip,
@@ -211,6 +211,34 @@ function KpiPill({ icon, label, value, color }: {
       <div>
         <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', lineHeight: 1.1 }}>{value}</div>
         <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function KpiPrimary({ icon, label, value, sub, color }: {
+  icon: React.ReactNode; label: string; value: React.ReactNode; sub: string; color?: string;
+}) {
+  return (
+    <div className="dp-elev" style={{
+      display: 'flex', alignItems: 'center', gap: 16,
+      background: 'var(--bg2)', border: '1px solid var(--border)',
+      borderRadius: 12, padding: '18px 22px', flex: 2, minWidth: 220,
+    }}>
+      <div style={{
+        width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+        background: color ? `${color}1a` : 'var(--accent-dim)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: color ?? 'var(--accent)',
+      }}>
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: 30, fontWeight: 800, color: color ?? 'var(--text)', lineHeight: 1.1 }}>
+          {value}
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginTop: 3 }}>{label}</div>
+        <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{sub}</div>
       </div>
     </div>
   );
@@ -783,6 +811,7 @@ export default function Overview() {
   const [tasks, setTasks]               = useState<Task[]>([]);
   const [backlogProduct, setBacklogProduct] = useState<string | null>(null);
 
+  const [prevDeployed, setPrevDeployed] = useState<number | null>(null);
   const [bugEnh, setBugEnh] = useState<Map<string, BugEnh>>(new Map());
   const [trend, setTrend]   = useState<TrendPoint[]>([]);
   const [trendProduct, setTrendProduct] = useState<string | null>(null); // null = all products
@@ -908,6 +937,18 @@ export default function Overview() {
       });
   }, [selectedMonth]);
 
+  // Previous month deployed count for MoM delta
+  useEffect(() => {
+    setPrevDeployed(null);
+    const prevYm = shiftMonth(selectedMonth, -1);
+    supabase
+      .from('ticket_imports')
+      .select('status', { count: 'exact', head: true })
+      .eq('imported_month', prevYm + '-01')
+      .eq('status', 'DEPLOYED')
+      .then(({ count }) => setPrevDeployed(count ?? 0));
+  }, [selectedMonth]);
+
   // 6-month created-ticket trend (one line per product) ending at the selected month
   useEffect(() => {
     if (products.length === 0) return;
@@ -978,6 +1019,24 @@ export default function Overview() {
     }
     return t;
   }, [productStats]);
+
+  const deliveryRate = statusTotals.total > 0
+    ? Math.round(totals.deployed / statusTotals.total * 100) : 0;
+  const healthColor = deliveryRate >= 70 ? 'var(--green)' : deliveryRate >= 40 ? 'var(--amber)' : 'var(--red)';
+  const health = deliveryRate >= 70 ? 'Green' : deliveryRate >= 40 ? 'Amber' : 'Red';
+
+  const momDisplay = (() => {
+    if (statsLoading || prevDeployed === null) return '—';
+    if (prevDeployed === 0 && totals.deployed === 0) return '—';
+    if (prevDeployed === 0) return `+${totals.deployed}`;
+    const delta = Math.round(((totals.deployed - prevDeployed) / prevDeployed) * 100);
+    return delta >= 0 ? `↑${delta}%` : `↓${Math.abs(delta)}%`;
+  })();
+  const momColor = (() => {
+    if (statsLoading || prevDeployed === null || (prevDeployed === 0 && totals.deployed === 0)) return 'var(--text2)';
+    if (prevDeployed === 0) return 'var(--green)';
+    return totals.deployed >= prevDeployed ? 'var(--green)' : 'var(--red)';
+  })();
 
   const statusDonutData = useMemo(() => ([
     { name: 'Open',        value: statusTotals.open,        color: CHART.open },
@@ -1113,30 +1172,32 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* KPI strip */}
+      {/* KPI strip — 2 primary + 2 supporting */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <KpiPrimary
+          icon={<TrendingUp size={20} />}
+          label="Delivery Rate"
+          value={statsLoading ? '—' : `${deliveryRate}%`}
+          sub={`${totals.deployed} of ${statusTotals.total} deployed · ${fmtMonth(selectedMonth)}`}
+          color={healthColor}
+        />
+        <KpiPrimary
+          icon={<Activity size={20} />}
+          label={`vs ${fmtMonth(shiftMonth(selectedMonth, -1))}`}
+          value={momDisplay}
+          sub={prevDeployed !== null ? `${totals.deployed} deployed this month, ${prevDeployed} last month` : 'Loading…'}
+          color={momColor}
+        />
+        <KpiPill
+          icon={<div style={{ width: 10, height: 10, borderRadius: '50%', background: healthColor }} />}
+          label="Team health"
+          value={statsLoading ? '—' : health}
+          color={healthColor}
+        />
         <KpiPill
           icon={<Users size={18} />}
           label="Active members"
           value={members.length}
-          color="var(--accent)"
-        />
-        <KpiPill
-          icon={<Activity size={18} />}
-          label={`Active tickets · ${fmtMonth(selectedMonth)}`}
-          value={totals.active}
-          color="var(--blue)"
-        />
-        <KpiPill
-          icon={<TrendingUp size={18} />}
-          label={`Deployed · ${fmtMonth(selectedMonth)}`}
-          value={totals.deployed}
-          color="var(--green)"
-        />
-        <KpiPill
-          icon={<Plus size={18} />}
-          label={`New · ${fmtMonth(selectedMonth)}`}
-          value={statusTotals.total}
           color="var(--accent)"
         />
       </div>
