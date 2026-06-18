@@ -213,9 +213,9 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            {/* Management routes (owner + admin) */}
+            {/* Management routes (owner + admin + member) */}
             <Route path="/management/*" element={
-              <ProtectedRoute roles={['owner', 'admin']}>
+              <ProtectedRoute roles={['owner', 'admin', 'member']}>
                 <AppShell>
                   <Routes>
                     <Route path="overview" element={<Overview />} />

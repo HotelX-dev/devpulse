@@ -25,9 +25,10 @@ const managerNav: NavItem[] = [
 ];
 
 const memberNav: NavItem[] = [
-  { to: '/member/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-  { to: '/member/tasks',     icon: <CheckSquare size={18} />,     label: 'My Tasks' },
-  { to: '/member/standup',   icon: <MessageSquare size={18} />,   label: 'Standup' },
+  { to: '/management/overview', icon: <BarChart2 size={18} />,      label: 'Overview' },
+  { to: '/member/dashboard',    icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
+  { to: '/member/tasks',        icon: <CheckSquare size={18} />,     label: 'My Tasks' },
+  { to: '/member/standup',      icon: <MessageSquare size={18} />,   label: 'Standup' },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
