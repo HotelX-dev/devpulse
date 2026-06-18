@@ -1023,7 +1023,7 @@ export default function Overview() {
   const deliveryRate = statusTotals.total > 0
     ? Math.round(totals.deployed / statusTotals.total * 100) : 0;
   const healthColor = deliveryRate >= 70 ? 'var(--green)' : deliveryRate >= 40 ? 'var(--amber)' : 'var(--red)';
-  const health = deliveryRate >= 70 ? 'Green' : deliveryRate >= 40 ? 'Amber' : 'Red';
+  const health = deliveryRate >= 70 ? 'On Track' : deliveryRate >= 40 ? 'At Risk' : 'Behind';
 
   const momDisplay = (() => {
     if (statsLoading || prevDeployed === null) return '—';
@@ -1191,7 +1191,7 @@ export default function Overview() {
         <KpiPill
           icon={<div style={{ width: 10, height: 10, borderRadius: '50%', background: healthColor }} />}
           label="Team health"
-          value={statsLoading ? '—' : health}
+          value={statsLoading ? '—' : `${health} · ${deliveryRate}%`}
           color={healthColor}
         />
         <KpiPill
