@@ -27,7 +27,7 @@ export interface Blocker {
   created_at: string;
 }
 export type LeaveType = 'Annual Leave' | 'MC' | 'Emergency';
-export type TaskType = 'Ticket' | 'Adhoc' | 'Migration' | 'Bug fix' | 'Performance' | 'Other';
+export type TaskType = 'Ticket' | 'Adhoc' | 'Migration' | 'Bug fix' | 'Performance' | 'Integration' | 'Enhancement' | 'Other';
 export type Severity = 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface Member {
