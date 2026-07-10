@@ -129,7 +129,7 @@ export default function ManagerDashboard() {
         .in('role', ['owner', 'admin', 'member'])
         .order('name'),
     ]).then(([{ data: prods }, { data: mems }]) => {
-      const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT'];
+      const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT', 'ACCOUNT_LITE'];
       const sorted = (prods ?? []).sort(
         (a, b) => CODE_ORDER.indexOf(a.code) - CODE_ORDER.indexOf(b.code),
       );

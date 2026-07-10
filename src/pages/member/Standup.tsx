@@ -6,7 +6,7 @@ import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { Product } from '../../types';
 
 /* ── constants ── */
-const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT'];
+const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT', 'ACCOUNT_LITE'];
 const TASK_TYPES = ['Ticket', 'Adhoc', 'Migration', 'Bug fix', 'Performance', 'Integration', 'Enhancement', 'Other'] as const;
 
 const PREFIX_TO_CODE: Record<string, string> = {

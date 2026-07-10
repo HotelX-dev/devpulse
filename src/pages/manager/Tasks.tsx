@@ -10,7 +10,7 @@ import type { Task, Member, Product, TaskStatus } from '../../types';
 /* ── constants ── */
 const TASK_TYPES   = ['Migration', 'Performance', 'Bug fix', 'Infra', 'Integration', 'Other'] as const;
 const STATUS_ORDER: TaskStatus[] = ['Pending', 'In Progress', 'Blocked', 'QC', 'Done'];
-const CODE_ORDER   = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT'];
+const CODE_ORDER   = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT', 'ACCOUNT_LITE'];
 
 const STATUS_COLOR: Record<TaskStatus, string> = {
   Pending:      'var(--text3)',

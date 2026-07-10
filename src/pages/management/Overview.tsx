@@ -905,7 +905,7 @@ export default function Overview() {
       supabase.from('standup_logs').select('member_id, date'),
       supabase.from('tasks').select('*').neq('status', 'Done').order('due_date', { ascending: true }),
     ]).then(([{ data: prods }, { data: mems }, { data: standups }, { data: taskData }]) => {
-      const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT'];
+      const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT', 'ACCOUNT_LITE'];
       const sorted = (prods ?? []).sort((a, b) =>
         CODE_ORDER.indexOf(a.code) - CODE_ORDER.indexOf(b.code)
       );
