@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   TrendingUp, Users, Activity, X,
   Maximize2, Minimize2, Sun, Moon,
-  CheckCircle, Clock, AlertCircle,
+  CheckCircle, Clock, AlertCircle, RefreshCw,
 } from 'lucide-react';
 import {
   ResponsiveContainer, XAxis, YAxis, Tooltip,
@@ -976,6 +976,13 @@ export default function Overview() {
   const [trendProduct, setTrendProduct] = useState<string | null>(null); // null = all products
   const [presenting, setPresenting] = useState(false);
   const [presentTheme, setPresentTheme] = useState<'light' | 'dark'>('light');
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  function refresh() {
+    setRefreshing(true);
+    setRefreshTick(t => t + 1);
+  }
 
   const pageRef     = useRef<HTMLDivElement>(null);
   const teamRef     = useRef<HTMLDivElement>(null);
@@ -1030,8 +1037,9 @@ export default function Overview() {
 
       setBacklogItems(backlogData ?? []);
       setBaseLoading(false);
+      setRefreshing(false);
     });
-  }, []);
+  }, [refreshTick]);
 
   // Month stats + per-member ticket counts
   useEffect(() => {
@@ -1095,7 +1103,7 @@ export default function Overview() {
         setBugEnh(be);
         setStatsLoading(false);
       });
-  }, [range.from, range.to]);
+  }, [range.from, range.to, refreshTick]);
 
   // Deployed count for the preceding equal-length period (MoM delta)
   useEffect(() => {
@@ -1109,7 +1117,7 @@ export default function Overview() {
       .lt('created_ts', utcDayStart(range.from))
       .eq('status', 'DEPLOYED')
       .then(({ count }) => setPrevDeployed(count ?? 0));
-  }, [range.from, range.to]);
+  }, [range.from, range.to, refreshTick]);
 
   // 6-month created-ticket trend (one line per product) ending at the range's end month
   useEffect(() => {
@@ -1143,7 +1151,7 @@ export default function Overview() {
         }
         setTrend(next);
       });
-  }, [range.to, products]);
+  }, [range.to, products, refreshTick]);
 
   // Fetch full ticket detail when a product is selected
   useEffect(() => {
@@ -1330,6 +1338,20 @@ export default function Overview() {
               {presentTheme === 'light' ? 'Dark' : 'Light'}
             </button>
           )}
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            title="Refresh data"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4,
+              background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 8,
+              padding: '8px 12px', cursor: refreshing ? 'default' : 'pointer',
+              color: 'var(--text2)', fontWeight: 600, fontSize: 12, opacity: refreshing ? 0.7 : 1,
+            }}
+          >
+            <RefreshCw size={14} style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
           <button
             onClick={togglePresent}
             title="Presentation mode (fullscreen)"
