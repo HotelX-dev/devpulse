@@ -17,6 +17,7 @@ import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { formatDate, sortMembers } from '../../lib/utils';
 import Avatar from '../../components/UI/Avatar';
 import type { Product, Member, TicketImport } from '../../types';
+import Loader from '../../components/UI/Loader';
 
 /* ── helpers ── */
 
@@ -284,8 +285,8 @@ function KpiPill({ icon, label, value, color }: {
   );
 }
 
-function KpiPrimary({ icon, label, value, sub, color }: {
-  icon: React.ReactNode; label: string; value: React.ReactNode; sub: string; color?: string;
+function KpiPrimary({ icon, label, value, sub, color, note }: {
+  icon: React.ReactNode; label: string; value: React.ReactNode; sub: string; color?: string; note?: string;
 }) {
   return (
     <div className="dp-elev" style={{
@@ -307,6 +308,11 @@ function KpiPrimary({ icon, label, value, sub, color }: {
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginTop: 3 }}>{label}</div>
         <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{sub}</div>
+        {note && (
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, fontStyle: 'italic', lineHeight: 1.4, maxWidth: 260 }}>
+            {note}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1235,7 +1241,7 @@ export default function Overview() {
   );
 
   if (baseLoading) {
-    return <div style={{ padding: 32, color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
+    return <Loader label="Loading overview…" padding={64} />;
   }
 
   return (
@@ -1348,6 +1354,7 @@ export default function Overview() {
           value={statsLoading ? '—' : `${deliveryRate}%`}
           sub={`${totals.deployed} of ${statusTotals.total} deployed · ${fmtRange(range.from, range.to)}`}
           color={healthColor}
+          note="Rollout spans multiple servers, so newly-deployed items may take time to reflect here."
         />
         <KpiPrimary
           icon={<Activity size={20} />}
@@ -1421,7 +1428,7 @@ export default function Overview() {
       {/* Analytics charts */}
       <Section title={`Analytics · ${fmtRange(range.from, range.to)}`}>
         {statsLoading ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>Loading…</div>
+          <Loader size={22} padding={16} />
         ) : statusTotals.total === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>
             No ticket data for {fmtRange(range.from, range.to)}.
@@ -1506,7 +1513,7 @@ export default function Overview() {
       {/* Ticket summary table */}
       <Section title="Ticket Summary · by product">
         {statsLoading ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>Loading…</div>
+          <Loader size={22} padding={16} />
         ) : (
           <Card style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ overflowX: 'auto' }}>
@@ -1555,7 +1562,7 @@ export default function Overview() {
       {/* Product snapshot + inline detail panel */}
       <Section title={`Product Snapshot · ${fmtRange(range.from, range.to)}`}>
         {statsLoading ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)', padding: '16px 0' }}>Loading…</div>
+          <Loader size={22} padding={16} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{

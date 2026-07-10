@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { Product } from '../../types';
+import Loader from '../../components/UI/Loader';
 
 /* ── constants ── */
 const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT', 'ACCOUNT_LITE'];
@@ -426,7 +427,7 @@ export default function MemberStandup() {
 
   const showForm = !existing || editing;
 
-  if (loading) return <div style={{ padding: 32, color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
+  if (loading) return <Loader label="Loading…" padding={64} />;
 
   return (
     <div style={pageStyle}>

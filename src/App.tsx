@@ -10,6 +10,7 @@ import type { Role } from './types';
 import Sidebar from './components/Layout/Sidebar';
 import Topbar from './components/Layout/Topbar';
 import MobileBottomNav from './components/Layout/MobileBottomNav';
+import Loader from './components/UI/Loader';
 import AlertsFullscreenPanel from './components/Layout/AlertsFullscreenPanel';
 
 import Login from './pages/Login';
@@ -139,28 +140,28 @@ function LoadingScreen() {
     <div style={{
       minHeight: '100dvh',
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       background: 'var(--bg)',
-      color: 'var(--text2)',
-      fontSize: 14,
-      gap: 10,
+      gap: 6,
     }}>
       <div style={{
-        width: 24,
-        height: 24,
-        borderRadius: 6,
+        width: 40,
+        height: 40,
+        borderRadius: 10,
         background: 'var(--accent)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontWeight: 700,
-        fontSize: 9,
+        fontSize: 14,
         color: '#fff',
+        marginBottom: 6,
       }}>
         DP
       </div>
-      Loading…
+      <Loader label="Loading…" padding={0} />
     </div>
   );
 }

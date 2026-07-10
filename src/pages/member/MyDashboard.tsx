@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { TicketStatus, TaskStatus } from '../../types';
+import Loader from '../../components/UI/Loader';
 
 /* ── helpers ── */
 function localToday(): string {
@@ -305,7 +306,7 @@ export default function MyDashboard() {
     });
   }, [member]);
 
-  if (loading) return <div style={{ padding: 32, color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
+  if (loading) return <Loader label="Loading…" padding={64} />;
 
   return (
     <div style={pageStyle}>

@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import type { TicketStatus, TaskStatus } from '../../types';
+import Loader from '../../components/UI/Loader';
 
 /* ── helpers ── */
 function localToday(): string {
@@ -337,7 +338,7 @@ export default function MyTasks() {
   const activeTicketCount = tickets.filter(t => !['DEPLOYED', 'NO_ACTION'].includes(t.status)).length;
   const activeTaskCount   = tasks.filter(t => t.status !== 'Done').length;
 
-  if (loading) return <div style={{ padding: 'max(24px, env(safe-area-inset-top)) 16px', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>;
+  if (loading) return <Loader label="Loading…" padding={64} />;
 
   return (
     <div style={pageStyle}>

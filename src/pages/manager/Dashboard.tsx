@@ -14,6 +14,7 @@ import BarChart, { type BarChartMonth } from '../../components/Charts/BarChart';
 import HeatmapGrid, { type HeatmapEntry } from '../../components/Charts/HeatmapGrid';
 import ForecastChart from '../../components/Charts/ForecastChart';
 import type { Product, Member, ForecastPoint } from '../../types';
+import Loader from '../../components/UI/Loader';
 
 /* ── helpers ── */
 
@@ -261,16 +262,8 @@ export default function ManagerDashboard() {
 
   if (loading && products.length === 0) {
     return (
-      <div style={{
-        padding: 'max(16px, env(safe-area-inset-top)) 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        color: 'var(--text3)',
-        fontSize: 13,
-      }}
-      >
-        Loading…
+      <div style={{ padding: 'max(16px, env(safe-area-inset-top)) 16px' }}>
+        <Loader label="Loading dashboard…" padding={64} />
       </div>
     );
   }
