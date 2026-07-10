@@ -16,7 +16,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { formatDate, sortMembers } from '../../lib/utils';
 import Avatar from '../../components/UI/Avatar';
-import type { Product, Member, TicketImport, Task } from '../../types';
+import type { Product, Member, TicketImport } from '../../types';
 
 /* ── helpers ── */
 
@@ -130,13 +130,29 @@ const TICKET_STATUS_LABEL: Record<string, string> = {
   NO_ACTION:   'No Action',
 };
 
-const TASK_STATUS_COLOR: Record<string, string> = {
-  'Pending':     'var(--text3)',
-  'In Progress': 'var(--blue)',
-  'Blocked':     'var(--red)',
-  'QC':          'var(--purple)',
-  'Done':        'var(--green)',
+// Backlog (Google Sheet) priority + status palettes
+const PRIORITY_COLOR: Record<string, string> = {
+  Critical: 'var(--red)', High: 'var(--amber)', Medium: 'var(--blue)', Low: 'var(--text3)',
 };
+const BACKLOG_STATUS_COLOR: Record<string, string> = {
+  'To Do': 'var(--text3)', 'In Progress': 'var(--blue)', 'Testing': 'var(--purple)',
+  'UAT': 'var(--purple)', 'Pending': 'var(--amber)', 'Pending Deploy': 'var(--amber)',
+  'Scheduled': 'var(--blue)', 'Monitoring': 'var(--green)', 'Blocked': 'var(--red)',
+  'On Hold': 'var(--text3)', 'Done': 'var(--green)',
+};
+
+interface BacklogItem {
+  id: string;
+  sort_index: number | null;
+  app: string | null;
+  product_id: string | null;
+  category: string | null;
+  task: string | null;
+  priority: string | null;
+  status: string | null;
+  owner: string | null;
+  delivery_bucket: string | null;
+}
 
 /* ── Local types ── */
 
@@ -865,7 +881,7 @@ export default function Overview() {
   const [selectedProductTickets, setSelectedProductTickets] = useState<TicketImport[]>([]);
   const [ticketsLoading, setTicketsLoading]             = useState(false);
 
-  const [tasks, setTasks]               = useState<Task[]>([]);
+  const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([]);
   const [backlogProduct, setBacklogProduct] = useState<string | null>(null);
 
   const [prevDeployed, setPrevDeployed] = useState<number | null>(null);
@@ -897,14 +913,14 @@ export default function Overview() {
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
-  // Base data: products, members, standup last dates, tasks
+  // Base data: products, members, standup last dates, backlog (from Google Sheet)
   useEffect(() => {
     Promise.all([
       supabase.from('products').select('*'),
       supabase.from('members').select('*').eq('active', true).order('name'),
       supabase.from('standup_logs').select('member_id, date'),
-      supabase.from('tasks').select('*').neq('status', 'Done').order('due_date', { ascending: true }),
-    ]).then(([{ data: prods }, { data: mems }, { data: standups }, { data: taskData }]) => {
+      supabase.from('backlog_items').select('*').order('sort_index', { ascending: true }),
+    ]).then(([{ data: prods }, { data: mems }, { data: standups }, { data: backlogData }]) => {
       const CODE_ORDER = ['HOTEL', 'MENU', 'EVENT', 'ACCOUNT', 'ACCOUNT_LITE'];
       const sorted = (prods ?? []).sort((a, b) =>
         CODE_ORDER.indexOf(a.code) - CODE_ORDER.indexOf(b.code)
@@ -926,7 +942,7 @@ export default function Overview() {
       }
       setMemberLastStandup(lastStandup);
 
-      setTasks(taskData ?? []);
+      setBacklogItems(backlogData ?? []);
       setBaseLoading(false);
     });
   }, []);
@@ -1128,10 +1144,10 @@ export default function Overview() {
     return Math.round(sum / trend.length);
   }, [trend, trendProduct, products]);
 
-  const filteredTasks = useMemo(() => {
-    if (!backlogProduct) return tasks;
-    return tasks.filter(t => t.product_id === backlogProduct);
-  }, [tasks, backlogProduct]);
+  const filteredBacklog = useMemo(() => {
+    if (!backlogProduct) return backlogItems;
+    return backlogItems.filter(b => b.product_id === backlogProduct);
+  }, [backlogItems, backlogProduct]);
 
   const selectedProduct = useMemo(
     () => products.find(p => p.id === selectedProductId) ?? null,
@@ -1610,12 +1626,12 @@ export default function Overview() {
         }
       >
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          {filteredTasks.length === 0 ? (
+          {filteredBacklog.length === 0 ? (
             <div style={{
               padding: '24px 20px', textAlign: 'center',
               fontSize: 13, color: 'var(--text3)',
             }}>
-              No upcoming tasks{backlogProduct ? ' for this product' : ''}.
+              No backlog items{backlogProduct ? ' for this product' : ''}.
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -1625,7 +1641,7 @@ export default function Overview() {
               }}>
                 <thead>
                   <tr>
-                    {['Title', 'Product', 'Type', 'Status', 'Due Date', 'Assignees'].map(h => (
+                    {['Task', 'App', 'Category', 'Priority', 'Status', 'Owner', 'Bucket'].map(h => (
                       <th key={h} style={{
                         padding: '10px 16px', textAlign: 'left',
                         fontWeight: 600, fontSize: 11, color: 'var(--text2)',
@@ -1638,50 +1654,42 @@ export default function Overview() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTasks.map((t, i) => {
-                    const prod = products.find(p => p.id === t.product_id);
-                    const assigneeNames = (t.assignees ?? [])
-                      .map(id => memberMap.get(id)?.name.split(' ')[0] ?? '?')
-                      .join(', ');
-                    const isOverdue = t.due_date && new Date(t.due_date) < new Date();
-
-                    return (
-                      <tr key={t.id} style={{
-                        borderBottom: '1px solid var(--border)',
-                        background: i % 2 === 0 ? 'transparent' : 'var(--bg3, rgba(0,0,0,0.02))',
-                      }}>
-                        <td style={{
-                          padding: '10px 16px', fontWeight: 600,
-                          maxWidth: 260, overflow: 'hidden',
-                          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {t.title}
-                        </td>
-                        <td style={{ padding: '10px 16px', color: 'var(--text2)', whiteSpace: 'nowrap' }}>
-                          {prod?.code ?? '—'}
-                        </td>
-                        <td style={{ padding: '10px 16px', color: 'var(--text2)', whiteSpace: 'nowrap' }}>
-                          {t.type || '—'}
-                        </td>
-                        <td style={{ padding: '10px 16px', whiteSpace: 'nowrap' }}>
-                          <StatusBadge
-                            label={t.status}
-                            color={TASK_STATUS_COLOR[t.status] ?? 'var(--text3)'}
-                          />
-                        </td>
-                        <td style={{
-                          padding: '10px 16px', whiteSpace: 'nowrap',
-                          color: isOverdue ? 'var(--red)' : 'var(--text2)',
-                          fontWeight: isOverdue ? 600 : 400,
-                        }}>
-                          {fmtDate(t.due_date)}
-                        </td>
-                        <td style={{ padding: '10px 16px', color: 'var(--text2)' }}>
-                          {assigneeNames || '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filteredBacklog.map((b, i) => (
+                    <tr key={b.id} style={{
+                      borderBottom: '1px solid var(--border)',
+                      background: i % 2 === 0 ? 'transparent' : 'var(--bg3, rgba(0,0,0,0.02))',
+                    }}>
+                      <td style={{
+                        padding: '10px 16px', fontWeight: 600,
+                        maxWidth: 320, overflow: 'hidden',
+                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }} title={b.task ?? undefined}>
+                        {b.task || '—'}
+                      </td>
+                      <td style={{ padding: '10px 16px', color: 'var(--text2)', whiteSpace: 'nowrap' }}>
+                        {b.app || '—'}
+                      </td>
+                      <td style={{ padding: '10px 16px', color: 'var(--text2)', whiteSpace: 'nowrap' }}>
+                        {b.category || '—'}
+                      </td>
+                      <td style={{ padding: '10px 16px', whiteSpace: 'nowrap' }}>
+                        {b.priority
+                          ? <StatusBadge label={b.priority} color={PRIORITY_COLOR[b.priority] ?? 'var(--text3)'} />
+                          : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '10px 16px', whiteSpace: 'nowrap' }}>
+                        {b.status
+                          ? <StatusBadge label={b.status} color={BACKLOG_STATUS_COLOR[b.status] ?? 'var(--text3)'} />
+                          : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '10px 16px', color: 'var(--text2)', whiteSpace: 'nowrap' }}>
+                        {b.owner || '—'}
+                      </td>
+                      <td style={{ padding: '10px 16px', color: 'var(--text2)', whiteSpace: 'nowrap' }}>
+                        {b.delivery_bucket || '—'}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
