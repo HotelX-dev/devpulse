@@ -79,7 +79,7 @@ export default function Sidebar() {
         alignItems: 'center',
         gap: 10,
       }}>
-        <Logo height={26} />
+        <Logo height={34} animated />
       </div>
 
       {/* Nav */}
