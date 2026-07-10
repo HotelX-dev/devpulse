@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, X, RefreshCw, Database } from 'lucide-react';
+import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, X, RefreshCw, Database, Sheet } from 'lucide-react';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { supabase } from '../../lib/supabase';
 import { parseCSV, workbookBytesToCsv, type ParsedTicket } from '../../lib/csvParser';
@@ -761,6 +761,92 @@ function ResyncCard() {
   );
 }
 
+/* ── Sync-backlog-from-Google-Sheet panel ── */
+interface BacklogSyncResponse {
+  ok?: boolean;
+  error?: string;
+  count?: number;
+  by_app?: Record<string, number>;
+}
+
+function BacklogSyncCard() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<BacklogSyncResponse | null>(null);
+  const [error, setError] = useState('');
+
+  async function run() {
+    setBusy(true);
+    setError('');
+    setResult(null);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke<BacklogSyncResponse>('sync-backlog');
+      if (fnErr) throw new Error(fnErr.message);
+      if (data?.error) throw new Error(data.error);
+      setResult(data ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sync failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const byApp = Object.entries(result?.by_app ?? {});
+
+  return (
+    <Card style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 42, height: 42, borderRadius: 10, flexShrink: 0,
+          background: 'var(--green-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Sheet size={20} color="var(--green)" />
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+            Sync backlog from Google Sheet
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 4, lineHeight: 1.5 }}>
+            Pulls the “Backlog” tab of the capacity-planning sheet and <strong style={{ color: 'var(--text2)' }}>replaces</strong> the
+            dashboard backlog. Feeds the Overview “Backlog · Upcoming Features” section.
+          </div>
+        </div>
+        <Btn onClick={run} disabled={busy} icon={busy ? undefined : <RefreshCw size={15} />}>
+          {busy ? 'Syncing…' : 'Sync backlog'}
+        </Btn>
+      </div>
+
+      {error && (
+        <div style={{
+          marginTop: 14, display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '10px 14px', borderRadius: 8,
+          background: 'var(--red-dim)', border: '1px solid var(--red)33',
+          fontSize: 13, color: 'var(--red)',
+        }}>
+          <X size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+          {error}
+        </div>
+      )}
+
+      {result?.ok && (
+        <div style={{
+          marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          padding: '10px 14px', borderRadius: 8,
+          background: 'var(--green-dim)', border: '1px solid var(--green)44',
+          fontSize: 13, color: 'var(--green)',
+        }}>
+          <Check size={15} />
+          Synced {result.count ?? 0} backlog items
+          {byApp.length > 0 && (
+            <span style={{ color: 'var(--text2)' }}>
+              ({byApp.map(([app, n]) => `${app} ${n}`).join(' · ')})
+            </span>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ── Main component ── */
 export default function Import() {
   const [step, setStep]               = useState<Step>(1);
@@ -985,6 +1071,8 @@ export default function Import() {
       </div>
 
       {!done && <ResyncCard />}
+
+      {!done && <BacklogSyncCard />}
 
       {!done && <Stepper step={step} />}
 

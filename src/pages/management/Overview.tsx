@@ -585,8 +585,6 @@ function quarterMeta(bucket: string | null): { label: string; sort: number } {
   return { label: `Q${m[1]} ${m[2]}`, sort: Number(m[2]) * 4 + Number(m[1]) };
 }
 
-const PRIORITY_RANK: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-
 function BacklogRoadmap({ items }: { items: BacklogItem[] }) {
   const groups = new Map<number, { label: string; sort: number; items: BacklogItem[] }>();
   for (const b of items) {
@@ -596,9 +594,8 @@ function BacklogRoadmap({ items }: { items: BacklogItem[] }) {
   }
   const cols = [...groups.values()].sort((a, b) => a.sort - b.sort);
   for (const c of cols) {
-    c.items.sort((a, b) =>
-      (PRIORITY_RANK[a.priority ?? ''] ?? 9) - (PRIORITY_RANK[b.priority ?? ''] ?? 9)
-      || (a.task ?? '').localeCompare(b.task ?? ''));
+    // ascending by task/description label
+    c.items.sort((a, b) => (a.task ?? '').localeCompare(b.task ?? ''));
   }
 
   if (cols.length === 0) {
