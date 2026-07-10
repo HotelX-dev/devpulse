@@ -578,6 +578,88 @@ function MemberTicketsModal({
   );
 }
 
+/* ── Backlog roadmap (grouped by delivery quarter) ── */
+function quarterMeta(bucket: string | null): { label: string; sort: number } {
+  const m = String(bucket ?? '').match(/Q([1-4])[-\s]?(\d{4})/i);
+  if (!m) return { label: 'Unscheduled', sort: Number.POSITIVE_INFINITY };
+  return { label: `Q${m[1]} ${m[2]}`, sort: Number(m[2]) * 4 + Number(m[1]) };
+}
+
+const PRIORITY_RANK: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
+function BacklogRoadmap({ items }: { items: BacklogItem[] }) {
+  const groups = new Map<number, { label: string; sort: number; items: BacklogItem[] }>();
+  for (const b of items) {
+    const meta = quarterMeta(b.delivery_bucket);
+    if (!groups.has(meta.sort)) groups.set(meta.sort, { label: meta.label, sort: meta.sort, items: [] });
+    groups.get(meta.sort)!.items.push(b);
+  }
+  const cols = [...groups.values()].sort((a, b) => a.sort - b.sort);
+  for (const c of cols) {
+    c.items.sort((a, b) =>
+      (PRIORITY_RANK[a.priority ?? ''] ?? 9) - (PRIORITY_RANK[b.priority ?? ''] ?? 9)
+      || (a.task ?? '').localeCompare(b.task ?? ''));
+  }
+
+  if (cols.length === 0) {
+    return (
+      <div style={{ padding: '24px 20px', textAlign: 'center', fontSize: 13, color: 'var(--text3)' }}>
+        No items to build.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: 4, WebkitOverflowScrolling: 'touch' }}>
+      {cols.map(col => {
+        const unscheduled = col.sort === Number.POSITIVE_INFINITY;
+        return (
+          <div key={col.label} style={{
+            flex: '0 0 auto', width: 264, display: 'flex', flexDirection: 'column',
+            background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 14px', borderBottom: '1px solid var(--border)',
+              background: unscheduled ? 'var(--bg3, var(--bg2))' : 'var(--accent-dim)',
+            }}>
+              <span style={{
+                fontSize: 13, fontWeight: 700,
+                color: unscheduled ? 'var(--text2)' : 'var(--accent)',
+              }}>
+                {col.label}
+              </span>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 20,
+                background: 'var(--bg3, var(--bg2))', color: 'var(--text2)',
+              }}>
+                {col.items.length}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, maxHeight: 460, overflowY: 'auto' }}>
+              {col.items.map(b => (
+                <div key={b.id} style={{
+                  background: 'var(--bg3, rgba(255,255,255,0.02))', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 7,
+                }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', lineHeight: 1.35 }}>
+                    {b.task || '—'}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {b.priority && <StatusBadge label={b.priority} color={PRIORITY_COLOR[b.priority] ?? 'var(--text3)'} />}
+                    {b.status && <StatusBadge label={b.status} color={BACKLOG_STATUS_COLOR[b.status] ?? 'var(--text3)'} />}
+                    <span style={{ fontSize: 10.5, color: 'var(--text3)', marginLeft: 'auto' }}>{b.app}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type SortKey = 'ticket_ref' | 'assignee' | 'status' | 'type' | 'priority' | 'expected';
 
 function TicketDetailPanel({
@@ -883,6 +965,7 @@ export default function Overview() {
 
   const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([]);
   const [backlogProduct, setBacklogProduct] = useState<string | null>(null);
+  const [backlogView, setBacklogView] = useState<'roadmap' | 'list'>('roadmap');
 
   const [prevDeployed, setPrevDeployed] = useState<number | null>(null);
   const [bugEnh, setBugEnh] = useState<Map<string, BugEnh>>(new Map());
@@ -1590,7 +1673,25 @@ export default function Overview() {
       <Section
         title="Backlog · Upcoming Features"
         action={
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['roadmap', 'list'] as const).map(v => {
+                const on = backlogView === v;
+                return (
+                  <button key={v} onClick={() => setBacklogView(v)} style={{
+                    fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                    cursor: 'pointer', transition: 'all 0.12s',
+                    background: on ? 'var(--accent)' : 'var(--bg2)',
+                    color: on ? '#fff' : 'var(--text2)',
+                    border: on ? '1px solid var(--accent)' : '1px solid var(--border)',
+                  }}>
+                    {v === 'roadmap' ? 'By quarter' : 'List'}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ width: 1, height: 18, background: 'var(--border)', alignSelf: 'center' }} />
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
               onClick={() => setBacklogProduct(null)}
               style={{
@@ -1622,9 +1723,13 @@ export default function Overview() {
                 {p.code}
               </button>
             ))}
+            </div>
           </div>
         }
       >
+        {backlogView === 'roadmap' ? (
+          <BacklogRoadmap items={filteredBacklog.filter(b => b.status !== 'Done')} />
+        ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           {filteredBacklog.length === 0 ? (
             <div style={{
@@ -1695,6 +1800,7 @@ export default function Overview() {
             </div>
           )}
         </Card>
+        )}
       </Section>
       </div>
 
