@@ -1668,7 +1668,11 @@ export default function Overview() {
       {/* ── Backlog ── */}
       <div ref={backlogRef}>
       <Section
-        title="Backlog · Upcoming Features"
+        title={`Backlog · Upcoming Features · ${
+          backlogView === 'roadmap'
+            ? filteredBacklog.filter(b => b.status !== 'Done').length
+            : filteredBacklog.length
+        }`}
         action={
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 6 }}>
