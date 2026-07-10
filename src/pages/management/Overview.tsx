@@ -1769,7 +1769,7 @@ export default function Overview() {
               No backlog items{backlogProduct ? ' for this product' : ''}.
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '68vh' }}>
               <table style={{
                 width: '100%', borderCollapse: 'collapse',
                 fontSize: 12, color: 'var(--text)',
@@ -1782,6 +1782,8 @@ export default function Overview() {
                         fontWeight: 600, fontSize: 11, color: 'var(--text2)',
                         borderBottom: '1px solid var(--border)',
                         whiteSpace: 'nowrap',
+                        position: 'sticky', top: 0, zIndex: 1,
+                        background: 'var(--bg2)',
                       }}>
                         {h}
                       </th>
