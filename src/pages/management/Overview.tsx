@@ -141,6 +141,13 @@ const BACKLOG_STATUS_COLOR: Record<string, string> = {
   'Scheduled': 'var(--blue)', 'Monitoring': 'var(--green)', 'Blocked': 'var(--red)',
   'On Hold': 'var(--text3)', 'Done': 'var(--green)',
 };
+// Severity order (0 = most urgent) so Priority sorts by importance, not alphabetically.
+const PRIORITY_RANK: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+// Workflow order (0 = earliest stage) so Status sorts along the delivery pipeline.
+const BACKLOG_STATUS_RANK: Record<string, number> = {
+  'To Do': 0, 'Scheduled': 1, 'In Progress': 2, 'Testing': 3, 'UAT': 4,
+  'Pending': 5, 'Pending Deploy': 6, 'Monitoring': 7, 'Blocked': 8, 'On Hold': 9, 'Done': 10,
+};
 
 interface BacklogItem {
   id: string;
@@ -154,6 +161,8 @@ interface BacklogItem {
   owner: string | null;
   delivery_bucket: string | null;
 }
+
+type BacklogSortKey = 'task' | 'app' | 'category' | 'priority' | 'status' | 'owner' | 'bucket';
 
 /* ── Local types ── */
 
@@ -591,7 +600,309 @@ function quarterMeta(bucket: string | null): { label: string; sort: number } {
   return { label: `Q${m[1]} ${m[2]}`, sort: Number(m[2]) * 4 + Number(m[1]) };
 }
 
+/* A single clickable roadmap card with hover feedback. */
+function RoadmapCard({ item: b, onClick }: { item: BacklogItem; onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: 'var(--bg3, rgba(255,255,255,0.02))',
+        border: `1px solid ${hover ? 'var(--accent)' : 'var(--border)'}`,
+        borderRadius: 8, padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 7,
+        cursor: 'pointer', transition: 'border-color 0.12s ease, transform 0.12s ease',
+        transform: hover ? 'translateY(-1px)' : 'none',
+      }}
+    >
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', lineHeight: 1.35 }}>
+        {b.task || '—'}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {b.priority && <StatusBadge label={b.priority} color={PRIORITY_COLOR[b.priority] ?? 'var(--text3)'} />}
+        {b.status && <StatusBadge label={b.status} color={BACKLOG_STATUS_COLOR[b.status] ?? 'var(--text3)'} />}
+        <span style={{ fontSize: 10.5, color: 'var(--text3)', marginLeft: 'auto' }}>{b.app}</span>
+      </div>
+    </div>
+  );
+}
+
+/* Detail popup for a single backlog item. */
+function BacklogDetailModal({ item: b, onClose }: { item: BacklogItem; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const rows: { label: string; value: React.ReactNode }[] = [
+    { label: 'App', value: b.app || '—' },
+    {
+      label: 'Category',
+      value: b.category
+        ? <StatusBadge label={b.category} color="var(--purple)" />
+        : '—',
+    },
+    {
+      label: 'Priority',
+      value: b.priority
+        ? <StatusBadge label={b.priority} color={PRIORITY_COLOR[b.priority] ?? 'var(--text3)'} />
+        : '—',
+    },
+    {
+      label: 'Status',
+      value: b.status
+        ? <StatusBadge label={b.status} color={BACKLOG_STATUS_COLOR[b.status] ?? 'var(--text3)'} />
+        : '—',
+    },
+    { label: 'Owner', value: b.owner || '—' },
+    { label: 'Delivery', value: b.delivery_bucket || 'Unscheduled' },
+  ];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        animation: 'fadeIn 0.15s ease',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg2)', border: '1px solid var(--border)',
+          borderRadius: 14, width: 'min(440px, 94vw)', maxHeight: '80vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 11,
+          padding: '16px 18px', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35 }}>
+              {b.task || '—'}
+            </div>
+            {b.category && (
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 3 }}>
+                {b.category}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              padding: '4px 6px', cursor: 'pointer', color: 'var(--text2)',
+              display: 'flex', alignItems: 'center', flexShrink: 0,
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Detail rows */}
+        <div style={{ overflowY: 'auto', padding: '6px 0' }}>
+          {rows.map((r, i) => (
+            <div
+              key={r.label}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 18px',
+                borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
+              }}
+            >
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text3)', minWidth: 78 }}>
+                {r.label}
+              </span>
+              <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{r.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Clickable quarter column header with hover affordance. */
+function QuarterColumnHeader({
+  label, count, unscheduled, onClick,
+}: {
+  label: string; count: number; unscheduled: boolean; onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={`View all ${label} items by category`}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', borderBottom: '1px solid var(--border)',
+        background: unscheduled ? 'var(--bg3, var(--bg2))' : 'var(--accent-dim)',
+        cursor: 'pointer', userSelect: 'none',
+      }}
+    >
+      <span style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        fontSize: 13, fontWeight: 700,
+        color: unscheduled ? 'var(--text2)' : 'var(--accent)',
+      }}>
+        {label}
+        <Maximize2 size={11} style={{ opacity: hover ? 0.9 : 0.35, transition: 'opacity 0.12s ease' }} />
+      </span>
+      <span style={{
+        fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 20,
+        background: 'var(--bg3, var(--bg2))', color: 'var(--text2)',
+      }}>
+        {count}
+      </span>
+    </div>
+  );
+}
+
+/* Popup: all items in one delivery quarter, grouped by category. */
+function QuarterCategoryModal({
+  label, items, onClose, onSelectItem,
+}: {
+  label: string;
+  items: BacklogItem[];
+  onClose: () => void;
+  onSelectItem: (b: BacklogItem) => void;
+}) {
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? items.filter(b =>
+        (b.task ?? '').toLowerCase().includes(q) ||
+        (b.category ?? '').toLowerCase().includes(q) ||
+        (b.app ?? '').toLowerCase().includes(q) ||
+        (b.owner ?? '').toLowerCase().includes(q))
+    : items;
+
+  // Group by category, alphabetical; "Uncategorized" last.
+  const catMap = new Map<string, BacklogItem[]>();
+  for (const b of filtered) {
+    const key = b.category?.trim() || 'Uncategorized';
+    if (!catMap.has(key)) catMap.set(key, []);
+    catMap.get(key)!.push(b);
+  }
+  const cats = [...catMap.entries()].sort((a, b) => {
+    if (a[0] === 'Uncategorized') return 1;
+    if (b[0] === 'Uncategorized') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+  for (const [, arr] of cats) arr.sort((a, b) => (a.task ?? '').localeCompare(b.task ?? ''));
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        animation: 'fadeIn 0.15s ease',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg2)', border: '1px solid var(--border)',
+          borderRadius: 14, width: 'min(560px, 94vw)', maxHeight: '82vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 11,
+          padding: '16px 18px', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 20,
+                background: 'var(--accent-dim)', color: 'var(--accent)',
+              }}>
+                {items.length} item{items.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 3 }}>
+              Grouped by category · {cats.length} categor{cats.length === 1 ? 'y' : 'ies'}
+            </div>
+          </div>
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Filter…"
+            style={{
+              flexShrink: 0, width: 130, fontSize: 12, color: 'var(--text)',
+              background: 'var(--bg3, var(--bg2))', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '6px 9px', outline: 'none',
+            }}
+          />
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              padding: '4px 6px', cursor: 'pointer', color: 'var(--text2)',
+              display: 'flex', alignItems: 'center', flexShrink: 0,
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Category groups */}
+        <div style={{ overflowY: 'auto', padding: '6px 0 12px' }}>
+          {cats.length === 0 ? (
+            <div style={{ padding: '24px 18px', fontSize: 13, color: 'var(--text3)', textAlign: 'center' }}>
+              No items match “{query}”.
+            </div>
+          ) : cats.map(([cat, arr]) => (
+            <div key={cat}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '12px 18px 4px',
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{cat}</span>
+                <span style={{
+                  fontSize: 10.5, color: 'var(--text3)',
+                  background: 'var(--bg3, var(--bg2))', padding: '1px 7px', borderRadius: 20,
+                }}>
+                  {arr.length}
+                </span>
+              </div>
+              <div style={{ padding: '4px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {arr.map(b => (
+                  <RoadmapCard key={b.id} item={b} onClick={() => onSelectItem(b)} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BacklogRoadmap({ items }: { items: BacklogItem[] }) {
+  const [selected, setSelected] = useState<BacklogItem | null>(null);
+  const [quarterView, setQuarterView] = useState<{ label: string; items: BacklogItem[] } | null>(null);
   const groups = new Map<number, { label: string; sort: number; items: BacklogItem[] }>();
   for (const b of items) {
     const meta = quarterMeta(b.delivery_bucket);
@@ -621,44 +932,29 @@ function BacklogRoadmap({ items }: { items: BacklogItem[] }) {
             flex: '0 0 auto', width: 264, display: 'flex', flexDirection: 'column',
             background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden',
           }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 14px', borderBottom: '1px solid var(--border)',
-              background: unscheduled ? 'var(--bg3, var(--bg2))' : 'var(--accent-dim)',
-            }}>
-              <span style={{
-                fontSize: 13, fontWeight: 700,
-                color: unscheduled ? 'var(--text2)' : 'var(--accent)',
-              }}>
-                {col.label}
-              </span>
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 20,
-                background: 'var(--bg3, var(--bg2))', color: 'var(--text2)',
-              }}>
-                {col.items.length}
-              </span>
-            </div>
+            <QuarterColumnHeader
+              label={col.label}
+              count={col.items.length}
+              unscheduled={unscheduled}
+              onClick={() => setQuarterView({ label: col.label, items: col.items })}
+            />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, maxHeight: 460, overflowY: 'auto' }}>
               {col.items.map(b => (
-                <div key={b.id} style={{
-                  background: 'var(--bg3, rgba(255,255,255,0.02))', border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 7,
-                }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', lineHeight: 1.35 }}>
-                    {b.task || '—'}
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {b.priority && <StatusBadge label={b.priority} color={PRIORITY_COLOR[b.priority] ?? 'var(--text3)'} />}
-                    {b.status && <StatusBadge label={b.status} color={BACKLOG_STATUS_COLOR[b.status] ?? 'var(--text3)'} />}
-                    <span style={{ fontSize: 10.5, color: 'var(--text3)', marginLeft: 'auto' }}>{b.app}</span>
-                  </div>
-                </div>
+                <RoadmapCard key={b.id} item={b} onClick={() => setSelected(b)} />
               ))}
             </div>
           </div>
         );
       })}
+      {quarterView && (
+        <QuarterCategoryModal
+          label={quarterView.label}
+          items={quarterView.items}
+          onClose={() => setQuarterView(null)}
+          onSelectItem={b => setSelected(b)}
+        />
+      )}
+      {selected && <BacklogDetailModal item={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
@@ -969,6 +1265,8 @@ export default function Overview() {
   const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([]);
   const [backlogProduct, setBacklogProduct] = useState<string | null>(null);
   const [backlogView, setBacklogView] = useState<'roadmap' | 'list'>('roadmap');
+  const [selectedBacklog, setSelectedBacklog] = useState<BacklogItem | null>(null);
+  const [backlogSort, setBacklogSort] = useState<{ key: BacklogSortKey; dir: 'asc' | 'desc' } | null>(null);
 
   const [prevDeployed, setPrevDeployed] = useState<number | null>(null);
   const [bugEnh, setBugEnh] = useState<Map<string, BugEnh>>(new Map());
@@ -1242,6 +1540,34 @@ export default function Overview() {
     if (!backlogProduct) return backlogItems;
     return backlogItems.filter(b => b.product_id === backlogProduct);
   }, [backlogItems, backlogProduct]);
+
+  const sortedBacklog = useMemo(() => {
+    if (!backlogSort) return filteredBacklog;
+    const { key, dir } = backlogSort;
+    const mul = dir === 'asc' ? 1 : -1;
+    const txt = (v: string | null) => (v ?? '').toLowerCase();
+    return [...filteredBacklog].sort((a, b) => {
+      switch (key) {
+        case 'priority':
+          return mul * ((PRIORITY_RANK[a.priority ?? ''] ?? 99) - (PRIORITY_RANK[b.priority ?? ''] ?? 99));
+        case 'status':
+          return mul * ((BACKLOG_STATUS_RANK[a.status ?? ''] ?? 99) - (BACKLOG_STATUS_RANK[b.status ?? ''] ?? 99));
+        case 'task':     return mul * txt(a.task).localeCompare(txt(b.task));
+        case 'app':      return mul * txt(a.app).localeCompare(txt(b.app));
+        case 'category': return mul * txt(a.category).localeCompare(txt(b.category));
+        case 'owner':    return mul * txt(a.owner).localeCompare(txt(b.owner));
+        case 'bucket':   return mul * txt(a.delivery_bucket).localeCompare(txt(b.delivery_bucket));
+        default:         return 0;
+      }
+    });
+  }, [filteredBacklog, backlogSort]);
+
+  function toggleBacklogSort(key: BacklogSortKey) {
+    setBacklogSort(prev =>
+      prev?.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' });
+  }
 
   const selectedProduct = useMemo(
     () => products.find(p => p.id === selectedProductId) ?? null,
@@ -1776,26 +2102,42 @@ export default function Overview() {
               }}>
                 <thead>
                   <tr>
-                    {['Task', 'App', 'Category', 'Priority', 'Status', 'Owner', 'Bucket'].map(h => (
-                      <th key={h} style={{
-                        padding: '10px 16px', textAlign: 'left',
-                        fontWeight: 600, fontSize: 11, color: 'var(--text2)',
-                        borderBottom: '1px solid var(--border)',
-                        whiteSpace: 'nowrap',
-                        position: 'sticky', top: 0, zIndex: 1,
-                        background: 'var(--bg2)',
-                      }}>
-                        {h}
-                      </th>
-                    ))}
+                    {([
+                      ['Task', 'task'], ['App', 'app'], ['Category', 'category'],
+                      ['Priority', 'priority'], ['Status', 'status'], ['Owner', 'owner'],
+                      ['Bucket', 'bucket'],
+                    ] as [string, BacklogSortKey][]).map(([label, key]) => {
+                      const active = backlogSort?.key === key;
+                      return (
+                        <th key={key}
+                          onClick={() => toggleBacklogSort(key)}
+                          style={{
+                            padding: '10px 16px', textAlign: 'left',
+                            fontWeight: 600, fontSize: 11,
+                            color: active ? 'var(--accent)' : 'var(--text2)',
+                            borderBottom: '1px solid var(--border)',
+                            whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
+                            position: 'sticky', top: 0, zIndex: 1,
+                            background: 'var(--bg2)',
+                          }}>
+                          {label}
+                          <span style={{ marginLeft: 4, opacity: active ? 1 : 0.3, fontSize: 9 }}>
+                            {active ? (backlogSort!.dir === 'asc' ? '▲' : '▼') : '⇅'}
+                          </span>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBacklog.map((b, i) => (
-                    <tr key={b.id} style={{
-                      borderBottom: '1px solid var(--border)',
-                      background: i % 2 === 0 ? 'transparent' : 'var(--bg3, rgba(0,0,0,0.02))',
-                    }}>
+                  {sortedBacklog.map((b, i) => (
+                    <tr key={b.id}
+                      onClick={() => setSelectedBacklog(b)}
+                      style={{
+                        borderBottom: '1px solid var(--border)',
+                        background: i % 2 === 0 ? 'transparent' : 'var(--bg3, rgba(0,0,0,0.02))',
+                        cursor: 'pointer',
+                      }}>
                       <td style={{
                         padding: '10px 16px', fontWeight: 600,
                         maxWidth: 320, overflow: 'hidden',
@@ -1845,6 +2187,11 @@ export default function Overview() {
           monthLabel={fmtRange(range.from, range.to)}
           onClose={() => setSelectedMemberId(null)}
         />
+      )}
+
+      {/* ── Backlog item detail (list view) ── */}
+      {selectedBacklog && (
+        <BacklogDetailModal item={selectedBacklog} onClose={() => setSelectedBacklog(null)} />
       )}
 
     </div>
