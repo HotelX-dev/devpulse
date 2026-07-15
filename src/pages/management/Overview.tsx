@@ -1752,6 +1752,7 @@ export default function Overview() {
             {label}
           </button>
         ))}
+        <Logo height={20} animated style={{ marginLeft: 'auto', display: 'block' }} />
       </div>
 
       {/* ── Team ── */}
