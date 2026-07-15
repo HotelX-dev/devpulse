@@ -16,6 +16,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { usePageShellStyle } from '../../hooks/usePageShellStyle';
 import { formatDate, sortMembers } from '../../lib/utils';
 import Avatar from '../../components/UI/Avatar';
+import Logo from '../../components/UI/Logo';
 import type { Product, Member, TicketImport } from '../../types';
 import Loader from '../../components/UI/Loader';
 
@@ -1591,9 +1592,13 @@ export default function Overview() {
         justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
       }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
-            {greeting()}{member ? `, ${member.name.split(' ')[0]}` : ''}
-          </div>
+          {presenting ? (
+            <Logo height={38} animated style={{ display: 'block' }} />
+          ) : (
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
+              {greeting()}{member ? `, ${member.name.split(' ')[0]}` : ''}
+            </div>
+          )}
           <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>
             {new Date().toLocaleDateString('en-MY', {
               weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
